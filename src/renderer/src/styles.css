@@ -1,0 +1,660 @@
+:root {
+  color-scheme: light;
+  --app-bg: silver;
+  --panel-bg: silver;
+  --muted-text: #4f4f4f;
+  --ok: #108a00;
+  --warn: #9b1111;
+  --focus: #000080;
+  --mono: "IBM Plex Mono", "Courier New", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--app-bg);
+}
+
+body,
+input,
+select,
+textarea,
+button {
+  color: #222;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-size: inherit;
+  line-height: 1.2;
+}
+
+a {
+  color: #000;
+}
+
+.desktop-shell {
+  min-height: 100vh;
+  padding: 0;
+  background: var(--app-bg);
+}
+
+.shell-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+.shell-body {
+  display: grid;
+  gap: 8px;
+  min-height: calc(100vh - 22px);
+  grid-template-rows: auto minmax(0, 1fr);
+  margin: 0;
+  padding: 4px 6px 30px;
+  overflow: hidden;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+}
+
+.skip-link:focus {
+  left: 20px;
+  top: 20px;
+  z-index: 100;
+  background: #fff;
+  padding: 6px 10px;
+}
+
+.workspace-tabs {
+  overflow-x: auto;
+}
+
+.tabpanel-window {
+  min-height: 0;
+  height: calc(100% - 10px);
+  max-height: calc(100% - 10px);
+  align-self: stretch;
+  margin: 0;
+  background: silver;
+  overflow: hidden;
+}
+
+.tabpanel-body {
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.window-help {
+  position: relative;
+  display: inline-flex;
+}
+
+.window-help-button {
+  min-width: 24px;
+  padding: 0 6px;
+  touch-action: manipulation;
+}
+
+.window-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.window-help-dialog {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.window-help-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.window-help-close {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.window-help-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.window-help-list li + li {
+  margin-top: 4px;
+}
+
+.tab-stack {
+  display: grid;
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+  align-content: start;
+  overflow: hidden;
+}
+
+.trading-stack,
+.portfolio-stack {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.setup-stack {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.section-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  margin: 0;
+  background: silver;
+  box-shadow:
+    inset -1px -1px #0a0a0a,
+    inset 1px 1px #ffffff,
+    inset -2px -2px #808080,
+    inset 2px 2px #dfdfdf;
+  overflow: hidden;
+}
+
+.section-window-body {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  min-height: 0;
+  padding: 6px 4px 4px;
+}
+
+.activity-window,
+.schedule-window,
+.positions-window,
+.activity-window-body,
+.schedule-window-body,
+.positions-window-body {
+  min-height: 0;
+}
+
+.activity-window,
+.schedule-window,
+.positions-window {
+  height: 100%;
+}
+
+.activity-window-body,
+.schedule-window-body {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.positions-window-body {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.market-panel-window,
+.market-panel-window .section-window-body {
+  height: 100%;
+  min-height: 0;
+}
+
+.market-panel-window .section-window-body {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.panel-heading.compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.section-caption {
+  margin: 0;
+  color: var(--muted-text);
+}
+
+.summary-strip,
+.trade-summary,
+.quote-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.summary-strip,
+.trade-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-item {
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #b3b3b3;
+}
+
+.summary-item span,
+.ticket-context,
+.metric span,
+.market-status,
+.secondary-line {
+  display: block;
+  color: var(--muted-text);
+}
+
+.summary-item strong,
+.ticket-context,
+.metric strong {
+  font-family: var(--mono);
+}
+
+.ticket-context {
+  padding: 2px 6px;
+  background: #fff;
+  border: 1px solid #b3b3b3;
+}
+
+.field-shell {
+  display: grid;
+  gap: 4px;
+}
+
+.setup-form {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-form-grid {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.auth-field-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 420px);
+  align-items: center;
+  gap: 6px;
+  justify-content: start;
+}
+
+.auth-label {
+  display: block;
+  text-align: left;
+}
+
+.auth-control {
+  width: 100%;
+  max-width: 420px;
+  justify-self: start;
+}
+
+.auth-select {
+  width: 92px;
+  max-width: none;
+}
+
+.auth-button-row {
+  justify-content: flex-start;
+  padding-left: 146px;
+}
+
+.field-shell.has-error input,
+.field-shell.has-error select {
+  outline: 1px solid var(--warn);
+  outline-offset: -1px;
+}
+
+.field-error {
+  margin: 0;
+  color: var(--warn);
+}
+
+.market-overview {
+  display: grid;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.market-overview h3 {
+  margin-bottom: 4px;
+}
+
+.muted,
+.log-entry p,
+.schedule-card p,
+.empty-state p {
+  margin: 0;
+  color: var(--muted-text);
+}
+
+.quote-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metric {
+  min-width: 0;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 2px;
+}
+
+.search-form,
+.button-row,
+.inline-actions,
+.schedule-meta,
+.log-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.search-form {
+  align-items: end;
+}
+
+.search-label {
+  flex: 1 1 280px;
+}
+
+.market-results {
+  min-height: 260px;
+  height: 100%;
+  padding: 6px;
+  overflow: auto;
+}
+
+.market-result {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.market-result + .market-result {
+  margin-top: 6px;
+}
+
+.market-result.active {
+  outline: 1px dotted var(--focus);
+  outline-offset: -4px;
+}
+
+.market-result-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.market-result-copy strong,
+.market-cell strong {
+  display: block;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.market-result-copy span,
+.market-status {
+  line-height: 1.2;
+}
+
+.market-status {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 1px;
+  text-align: right;
+}
+
+.inline-banner {
+  padding: 6px;
+  border: 1px solid #b3b3b3;
+  background: #fff4f4;
+}
+
+.inline-banner.error,
+.status-banner.error {
+  color: var(--warn);
+}
+
+.order-form {
+  display: grid;
+  gap: 8px;
+}
+
+.protection-strategy {
+  display: grid;
+  gap: 8px;
+}
+
+.protection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.protection-block {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+}
+
+.protection-block label {
+  display: grid;
+  gap: 4px;
+}
+
+.table-wrap {
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+}
+
+.table-wrap table {
+  width: 100%;
+}
+
+.schedule-list,
+.log-list {
+  display: grid;
+  gap: 6px;
+}
+
+.schedule-scroll-list,
+.activity-log-list {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.market-results::-webkit-scrollbar-button:vertical:start:increment,
+.market-results::-webkit-scrollbar-button:vertical:end:decrement,
+.table-wrap::-webkit-scrollbar-button:vertical:start:increment,
+.table-wrap::-webkit-scrollbar-button:vertical:end:decrement,
+.schedule-scroll-list::-webkit-scrollbar-button:vertical:start:increment,
+.schedule-scroll-list::-webkit-scrollbar-button:vertical:end:decrement,
+.activity-log-list::-webkit-scrollbar-button:vertical:start:increment,
+.activity-log-list::-webkit-scrollbar-button:vertical:end:decrement {
+  display: none;
+  height: 0;
+}
+
+.schedule-card,
+.log-entry {
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #b3b3b3;
+}
+
+.status-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.status-banner {
+  padding: 6px;
+  border: 1px solid #b3b3b3;
+  background: #fff;
+}
+
+.status-banner.success {
+  color: var(--ok);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid #808080;
+  background: #fff;
+  color: #000;
+}
+
+.status-pill.status-success,
+.status-pill.status-scheduled,
+.status-pill.status-executed {
+  color: var(--ok);
+}
+
+.status-pill.status-error,
+.status-pill.status-failed,
+.status-pill.status-missed {
+  color: var(--warn);
+}
+
+.empty-state {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  text-align: center;
+  padding: 12px;
+  min-height: 96px;
+}
+
+.empty-state.compact {
+  min-height: 80px;
+}
+
+.positive {
+  color: var(--ok);
+}
+
+.negative {
+  color: var(--warn);
+}
+
+.loading-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loading-dot {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+
+.status-bar {
+  display: flex;
+  align-items: stretch;
+  min-height: 20px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 2px;
+  background: silver;
+  box-shadow: inset 1px 1px #fff, inset -1px -1px grey;
+  pointer-events: none;
+}
+
+.status-bar-field {
+  display: flex;
+  align-items: flex-end;
+  min-height: 18px;
+  margin: 0;
+  padding: 1px 4px 2px;
+  line-height: 13px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+@media (max-width: 980px) {
+  .summary-strip,
+  .trade-summary,
+  .quote-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-strip,
+  .trade-summary,
+  .quote-grid,
+  .protection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auth-field-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .auth-button-row {
+    padding-left: 0;
+  }
+}

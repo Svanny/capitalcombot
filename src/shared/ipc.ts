@@ -1,0 +1,18 @@
+export const IPC_CHANNELS = {
+  APP_BOOTSTRAP: "app.bootstrap",
+  AUTH_CONNECT: "auth.connect",
+  AUTH_CONNECT_SAVED: "auth.connectSaved",
+  AUTH_DISCONNECT: "auth.disconnect",
+  AUTH_FORGET_SAVED: "auth.forgetSaved",
+  MARKETS_SEARCH_GOLD: "markets.searchGold",
+  MARKETS_SELECT: "markets.select",
+  QUOTES_GET_SELECTED: "quotes.getSelected",
+  POSITIONS_LIST_OPEN: "positions.listOpen",
+  POSITIONS_CLOSE: "positions.close",
+  POSITIONS_REVERSE: "positions.reverse",
+  POSITIONS_UPDATE_PROTECTION: "positions.updateProtection",
+  ORDERS_OPEN_MARKET: "orders.openMarket",
+  ORDERS_PREVIEW_PROTECTION: "orders.previewProtection",
+  SCHEDULES_LIST: "schedules.list",
+  SCHEDULES_CANCEL: "schedules.cancel",
+} as const;
