@@ -1,37 +1,94 @@
-# Capital Gold Trader
+# Capital.com Trading Assistant
 
-Electron desktop app for placing Capital.com Gold market orders, monitoring open positions, and scheduling delayed orders while the app is running.
+Electron desktop app for placing Capital.com market orders, scheduling delayed market orders, and managing open-position protection from a local desktop client. The current workflow is still primarily optimized for Gold discovery and Gold-first trading setups.
 
-## Features
+## Current Features
 
-- Demo-first Capital.com login flow handled in the Electron main process
-- macOS keychain storage for Capital.com credentials via `keytar`
-- Gold market search and selection through the Capital.com `/markets` API
-- Market buy/sell order ticket with optional scheduled order execution
-- Open positions table with close, reverse, and protection actions
-- Restored scheduled orders and execution log persisted locally
-- Hot reload in development for renderer, preload, and main-process changes
+- Capital.com demo/live login handled in the Electron main process
+- Capital.com market search and selection through the Capital.com API, with Gold as the primary workflow
+- Immediate market buy/sell orders
+- One-off and repeating scheduled market orders
+- Stop-loss and take-profit strategy inputs with live preview
+- Open-position close, reverse, and protection update actions
+- Local execution log and scheduled-order persistence
+- macOS keychain integration through `keytar`, with in-memory fallback when unavailable
+- Hot reload in development with `electron-vite`
 
 ## Requirements
 
-- macOS
+- macOS for local app development and DMG packaging
 - Node.js 25+
+- `pnpm`
 - A Capital.com account with API access enabled
-- Capital.com API key, identifier, and password
+- Capital.com account identifier, API password, and API key
 
 ## Development
 
+Install dependencies:
+
 ```bash
 pnpm install
+```
+
+Run tests:
+
+```bash
 pnpm test
-pnpm build
+```
+
+Run the desktop app with hot reload:
+
+```bash
 pnpm dev
 ```
 
-`pnpm dev` runs `electron-vite dev --watch`, so renderer changes use Vite HMR and main/preload changes trigger an Electron restart or window reload during development. Use `pnpm dev:plain` only if you explicitly want the non-watch dev server.
+`pnpm dev` runs `electron-vite dev --watch`, so renderer edits use Vite HMR and main/preload edits trigger Electron restart or reload during development.
 
-## Notes
+Build the production app bundles:
 
-- Scheduled orders are best-effort and only execute while the Electron process is running.
-- The app stores only non-secret UI state in `electron-store`; secrets are kept in the macOS keychain.
-- The included tests cover the Capital.com client request mapping, scheduler behavior, IPC handlers, and renderer-side order validation.
+```bash
+pnpm build
+```
+
+## Packaging
+
+Installer artifacts are generated locally and are not committed to the repository. Output goes to `release/`.
+
+Build an unsigned macOS DMG:
+
+```bash
+pnpm package:mac
+```
+
+Build an unsigned Windows NSIS `.exe` from macOS/Linux through Docker/Wine:
+
+```bash
+pnpm package:win
+```
+
+Build both:
+
+```bash
+pnpm package:all
+```
+
+### Packaging Notes
+
+- macOS packaging does not require Docker.
+- Windows packaging on macOS/Linux requires Docker Desktop running and uses `electronuserland/builder:wine`.
+- The packaging scripts rebuild Electron-native dependencies such as `keytar` for the target platform before bundling so saved-credential support remains available in packaged apps.
+- If Windows cross-builds fail on a specific machine or CI image because of native-module tooling, use a Windows build host.
+- Installers in this pass are unsigned and not notarized.
+
+## Runtime Notes
+
+- Scheduled orders execute only while the desktop app is running.
+- Non-secret local UI state is persisted with `electron-store`.
+- Secrets are kept in the macOS keychain when `keytar` is available.
+- If `keytar` is unavailable, the app falls back to in-memory credentials for the current session only.
+
+## License
+
+Copyright © 2026 Svanny.
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE).

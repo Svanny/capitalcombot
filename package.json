@@ -1,13 +1,18 @@
 {
   "name": "capitalcombot",
-  "private": true,
   "version": "0.1.0",
+  "description": "Electron desktop app for Capital.com instrument trading, primarily optimized for Gold workflows, with scheduled orders and protection strategies.",
+  "author": "Svanny",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev --watch",
     "dev:plain": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
+    "package:mac": "bash scripts/package-mac.sh",
+    "package:win": "bash scripts/package-win-docker.sh",
+    "package:all": "pnpm package:mac && pnpm package:win",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -29,6 +34,7 @@
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "electron": "latest",
+    "electron-builder": "latest",
     "electron-vite": "latest",
     "jsdom": "latest",
     "typescript": "latest",
