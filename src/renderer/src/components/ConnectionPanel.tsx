@@ -62,7 +62,7 @@ export function ConnectionPanel({
             value={savedProfile?.identifier ?? (authForm.identifier || "No saved account")}
           />
           <SummaryItem label="Environment" value={authForm.environment.toUpperCase()} />
-          <SummaryItem label="Market" value={selectedMarket?.epic ?? "No Gold market selected"} />
+          <SummaryItem label="Market" value={selectedMarket?.epic ?? "No primary market selected"} />
         </div>
 
         <div className="inline-actions">

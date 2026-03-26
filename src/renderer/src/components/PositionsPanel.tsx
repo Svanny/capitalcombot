@@ -27,7 +27,7 @@ export function PositionsPanel({
           <WindowHelpButton
             title="Open Positions"
             hints={[
-              "Live Gold positions with close and reverse actions.",
+              "Live Capital.com positions with close and reverse actions.",
               "Refresh pulls the latest open positions from Capital.com.",
             ]}
           />
@@ -58,7 +58,7 @@ export function PositionsPanel({
               <tr>
                 <td colSpan={7}>
                   <div className="empty-state">
-                    <strong>No open Gold positions.</strong>
+                    <strong>No open positions.</strong>
                     <p>Connect, select a market, and place a buy or sell order to see live trades here.</p>
                   </div>
                 </td>

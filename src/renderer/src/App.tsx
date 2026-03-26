@@ -426,7 +426,7 @@ export default function App() {
       const results = await window.capitalApi.markets.searchGold(marketQuery);
       setMarketResults(results);
       if (results.length === 0) {
-        setStatusMessage("No Gold markets matched that search.");
+        setStatusMessage("No markets matched that search.");
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -676,18 +676,19 @@ export default function App() {
     statusMessage ??
     (selectedMarket
       ? `${selectedMarket.instrumentName} • ${selectedMarket.marketStatus}`
-      : "No Gold market selected");
+      : "No primary market selected");
 
   return (
     <div className="desktop-shell">
       <div className="window shell-window">
         <div className="title-bar">
-          <div className="title-bar-text">Capital.com Gold Trading Assitant</div>
+          <div className="title-bar-text">Capital.com Trading Assistant</div>
           <div className="title-bar-controls">
             <WindowHelpButton
-              title="Capital.com Gold Trading Assitant"
+              title="Capital.com Trading Assistant"
               hints={[
-                "Use Setup to connect your account and pick the Gold instrument.",
+                "Use Setup to connect your account and pick the instrument you want to trade.",
+                "The current workflow is primarily optimized for Gold discovery and Gold-first trading.",
                 "Use Trading to place market orders immediately or queue them for later.",
                 "Use Portfolio to monitor open positions and scheduled orders.",
               ]}

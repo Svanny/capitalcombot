@@ -72,11 +72,12 @@ export function OrderTicket({
           <WindowHelpButton
             title="Trade Ticket"
             hints={[
-              "Submit a market buy or sell for the selected Gold instrument.",
+              "Submit a market buy or sell for the selected instrument.",
               "Leave scheduling off to place the market order immediately.",
               "One-off schedules queue a single market order at a chosen date and time.",
               "Repeating schedules queue a market order every day at the chosen local time while this desktop app stays open.",
               "Protection values can use raw levels, raw distances, risk/reward, or ADX-derived distance.",
+              "The default workflow is Gold-first, but the ticket works with any selected Capital.com instrument.",
             ]}
           />
         </div>
@@ -89,7 +90,7 @@ export function OrderTicket({
         </div>
 
         <div className="summary-strip trade-summary">
-          <SummaryItem label="Selected market" value={selectedMarket?.instrumentName ?? "No Gold market selected"} />
+          <SummaryItem label="Selected market" value={selectedMarket?.instrumentName ?? "No primary market selected"} />
           <SummaryItem label="Working side" value={direction} />
           <SummaryItem
             label="Size preview"
@@ -219,14 +220,14 @@ export function OrderTicket({
                 <LoadingLabel label="Submitting" />
               ) : wantsScheduledClose ? (
                 direction === "BUY" ? (
-                  "Schedule Buy Gold"
+                  "Schedule Buy Order"
                 ) : (
-                  "Schedule Sell Gold"
+                  "Schedule Sell Order"
                 )
               ) : direction === "BUY" ? (
-                "Buy Gold"
+                "Buy Market Order"
               ) : (
-                "Sell Gold"
+                "Sell Market Order"
               )}
             </button>
           </div>

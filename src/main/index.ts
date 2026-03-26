@@ -46,7 +46,7 @@ function createMainWindow(): BrowserWindow {
     minHeight: 760,
     backgroundColor: "#091215",
     icon: appIcon.isEmpty() ? undefined : appIcon,
-    title: "Capital.com Gold Trading Assitant",
+    title: "Capital.com Trading Assistant",
     webPreferences: {
       preload: join(currentDir, "../preload/index.cjs"),
       contextIsolation: true,

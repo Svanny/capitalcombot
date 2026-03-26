@@ -59,7 +59,7 @@ const connectedBootstrap: BootstrapState = {
     {
       action: "market",
       status: "success",
-      message: "Selected Gold.",
+      message: "Selected Spot Gold.",
       at: "2026-03-23T09:00:00.000Z",
     },
     {
@@ -217,7 +217,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByLabelText("Account identifier")).toBeInTheDocument();
-    expect(screen.getByText("Capital.com Gold Trading Assitant")).toBeInTheDocument();
+    expect(screen.getByText("Capital.com Trading Assistant")).toBeInTheDocument();
     expect(screen.getAllByText("XAUUSD").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /hide setup|edit setup|open setup/i })).not.toBeInTheDocument();
   });
@@ -228,15 +228,15 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Trading" }));
-    const submitButton = await screen.findByRole("button", { name: "Buy Gold" });
+    const submitButton = await screen.findByRole("button", { name: "Buy Market Order" });
     fireEvent.click(submitButton);
 
     await waitFor(() => {
       expect(
-        screen.getAllByText("Select a Gold market before submitting an order.").length,
+        screen.getAllByText("Select a market before submitting an order.").length,
       ).toBeGreaterThan(0);
     });
-    expect(screen.getByLabelText("Search Gold instruments")).toHaveFocus();
+    expect(screen.getByLabelText("Search instruments")).toHaveFocus();
   });
 
   it("shows auth errors inline in the account session panel", async () => {
@@ -268,7 +268,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
-    expect(await screen.findByText("No open Gold positions.")).toBeInTheDocument();
+    expect(await screen.findByText("No open positions.")).toBeInTheDocument();
     expect(await screen.findByText("No scheduled orders.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Trading" }));
@@ -307,7 +307,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Trading" }));
-    const activityEntries = await screen.findAllByText(/Connected to Capital.com demo environment.|Selected Gold\./);
+    const activityEntries = await screen.findAllByText(/Connected to Capital.com demo environment.|Selected Spot Gold\./);
     expect(activityEntries[0]).toHaveTextContent("Connected to Capital.com demo environment.");
 
     fireEvent.click(screen.getByRole("link", { name: "Portfolio" }));

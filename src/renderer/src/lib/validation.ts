@@ -60,7 +60,7 @@ export function validateOrderForm(input: OrderFormInput): OrderValidationResult 
   const normalizedSize = Number(input.size);
 
   if (!input.selectedMarketEpic) {
-    fieldErrors.selectedMarketEpic = "Select a Gold market before submitting an order.";
+    fieldErrors.selectedMarketEpic = "Select a market before submitting an order.";
   }
 
   if (!Number.isFinite(normalizedSize) || normalizedSize <= 0) {

@@ -62,7 +62,7 @@ describe("validateOrderForm", () => {
       selectedMarketEpic: null,
     });
 
-    expect(result.fieldErrors.selectedMarketEpic).toContain("Select a Gold market");
+    expect(result.fieldErrors.selectedMarketEpic).toContain("Select a market");
   });
 
   it("parses local datetime strings", () => {

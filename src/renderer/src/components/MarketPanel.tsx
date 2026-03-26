@@ -33,14 +33,14 @@ export function MarketPanel({
   return (
     <section className="window section-window market-panel-window">
       <div className="title-bar">
-        <div className="title-bar-text">Gold Market Selector</div>
+        <div className="title-bar-text">Primary Instrument Selector</div>
         <div className="title-bar-controls">
           <WindowHelpButton
-            title="Gold Market Selector"
+            title="Primary Instrument Selector"
             hints={[
               "Search and lock the instrument used in the trade tab.",
-              "Connect first to search available Gold markets.",
-              "Select a Gold instrument before placing an order.",
+              "Gold is the primary workflow, but you can search other Capital.com instruments by name or epic too.",
+              "Connect first to search available Capital.com markets.",
             ]}
           />
         </div>
@@ -48,11 +48,11 @@ export function MarketPanel({
       <div className="window-body section-window-body">
         <div className="sunken-panel market-overview">
           <div>
-            <h3>{selectedMarket?.instrumentName ?? "No Gold market selected"}</h3>
+            <h3>{selectedMarket?.instrumentName ?? "No primary market selected"}</h3>
             <p className="muted">
               {selectedMarket
                 ? `${selectedMarket.instrumentType} • ${selectedMarket.marketStatus}`
-                : "Select a Gold instrument before placing an order."}
+                : "Choose the main instrument for this workspace. Gold remains the default use case."}
             </p>
           </div>
           <div className="quote-grid">
@@ -78,12 +78,12 @@ export function MarketPanel({
         <form className="search-form" onSubmit={onMarketSearch}>
           <div className="field-row-stacked search-label">
             <label>
-              Search Gold instruments
+              Search instruments
               <input
                 ref={searchInputRef}
                 aria-describedby={orderError ? "selectedMarket-error" : undefined}
                 name="marketSearch"
-                placeholder="gold, spot gold, xau…"
+                placeholder="gold, xau, us30, brent…"
                 value={marketQuery}
                 onChange={(event) => onMarketQueryChange(event.target.value)}
               />
@@ -94,12 +94,12 @@ export function MarketPanel({
           </button>
         </form>
 
-        <div className="sunken-panel market-results" role="list" aria-label="Gold search results">
+        <div className="sunken-panel market-results" role="list" aria-label="Instrument search results">
           {marketResults.length === 0 ? (
             <div className="empty-state compact">
               {connected
-                ? "Search for Gold markets to choose the instrument you want to trade."
-                : "Connect first to search available Gold markets."}
+                ? "Search Capital.com instruments to choose what you want to trade. Gold remains the primary focus."
+                : "Connect first to search available Capital.com markets."}
             </div>
           ) : (
             marketResults.map((market) => (

@@ -25,7 +25,7 @@ export function HeaderBar({
       </a>
       <div className="topbar-copy">
         <p className="eyebrow">Capital.com desktop</p>
-        <h1>Gold trading workspace</h1>
+        <h1>Capital.com trading workspace</h1>
         <p className="topbar-note">
           Guided order flow with live market context and scheduled order tracking.
         </p>
@@ -42,7 +42,7 @@ export function HeaderBar({
         <div className="hero-grid">
           <MetricCard
             label="Selected market"
-            value={selectedMarket?.instrumentName ?? "No Gold market selected"}
+            value={selectedMarket?.instrumentName ?? "No primary market selected"}
             meta={selectedMarket?.epic ?? "Select a market in setup"}
           />
           <MetricCard
