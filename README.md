@@ -30,6 +30,13 @@ Install dependencies:
 pnpm install
 ```
 
+This repo declares the native packages that must be allowed to run PNPM install scripts, so a fresh install should fetch the Electron binary and build native modules automatically. If an older local install still fails with `Electron failed to install correctly`, run:
+
+```bash
+pnpm approve-builds --all
+pnpm install
+```
+
 Run tests:
 
 ```bash
