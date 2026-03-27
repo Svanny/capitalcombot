@@ -25,15 +25,15 @@ import {
   type ProtectionFormState,
   validateProtectionForm,
 } from "./lib/protection-form";
-import { ConnectionPanel } from "./components/ConnectionPanel";
-import { MarketPanel } from "./components/MarketPanel";
-import { OrderTicket } from "./components/OrderTicket";
-import { PositionProtectionPanel } from "./components/PositionProtectionPanel";
-import { PositionsPanel } from "./components/PositionsPanel";
-import { SchedulePanel } from "./components/SchedulePanel";
-import { ActivityFeed } from "./components/ActivityFeed";
+import { ActivityFeed } from "./features/activity/ActivityFeed";
+import { PositionProtectionPanel } from "./features/portfolio/PositionProtectionPanel";
+import { PositionsPanel } from "./features/portfolio/PositionsPanel";
+import { ConnectionPanel } from "./features/setup/ConnectionPanel";
+import { MarketPanel } from "./features/trading/MarketPanel";
+import { OrderTicket } from "./features/trading/OrderTicket";
+import { SchedulePanel } from "./features/trading/SchedulePanel";
 import { formatDateTime } from "./lib/formatters";
-import { WindowHelpButton } from "./components/WindowHelpButton";
+import { WindowHelpButton } from "./ui/WindowHelpButton";
 
 const QUOTE_POLL_MS = 8_000;
 const POSITIONS_POLL_MS = 12_000;

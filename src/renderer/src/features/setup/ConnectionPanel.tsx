@@ -1,7 +1,7 @@
 import type { CapitalCredentials, MarketSummary, SavedProfile } from "@shared/types";
 import type { FormEvent, ReactNode, RefObject } from "react";
-import type { AuthFieldName } from "../lib/validation";
-import { WindowHelpButton } from "./WindowHelpButton";
+import type { AuthFieldName } from "../../lib/validation";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface ConnectionPanelProps {
   authErrors: Partial<Record<AuthFieldName, string>>;

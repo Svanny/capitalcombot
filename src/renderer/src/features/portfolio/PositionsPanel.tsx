@@ -1,6 +1,6 @@
 import type { OpenPosition } from "@shared/types";
-import { formatCurrency, formatNumber } from "../lib/formatters";
-import { WindowHelpButton } from "./WindowHelpButton";
+import { formatCurrency, formatNumber } from "../../lib/formatters";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface PositionsPanelProps {
   onEditProtection: (position: OpenPosition) => void;

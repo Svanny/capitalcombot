@@ -1,6 +1,6 @@
 import type { ExecutionResult } from "@shared/types";
-import { formatDateTime } from "../lib/formatters";
-import { WindowHelpButton } from "./WindowHelpButton";
+import { formatDateTime } from "../../lib/formatters";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface ActivityFeedProps {
   errorMessage: string | null;

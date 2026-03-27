@@ -5,7 +5,7 @@ import type {
   ScheduledOrderJob,
   ScheduledOrderRequest,
 } from "../../shared/types";
-import { buildExecutionResult, type AppStateStore } from "./app-store";
+import { buildExecutionResult, type AppStateStore } from "../state/app-store";
 
 export type ScheduledOrderInput = ScheduledOrderRequest & {
   epic: string;

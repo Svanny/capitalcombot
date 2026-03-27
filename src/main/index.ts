@@ -1,42 +1,17 @@
 import { BrowserWindow, app, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { CapitalClient } from "./capital/client";
+import { CapitalClient } from "./trading/capital/client";
 import { registerIpcHandlers } from "./ipc";
-import { ElectronAppStateStore, buildExecutionResult } from "./services/app-store";
-import { createCredentialStore } from "./services/credential-store";
-import { resolveProtection } from "./services/protection";
-import { ScheduledOrderScheduler } from "./services/scheduler";
+import { createCredentialStore } from "./security/credential-store";
+import { buildExecutionResult, createAppStateStore } from "./state/app-store";
+import { resolveProtection } from "./trading/protection";
+import { ScheduledOrderScheduler } from "./trading/scheduler";
 
-const store = new ElectronAppStateStore();
 const client = new CapitalClient();
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
 const iconPath = join(currentDir, "../../gold_die_logo.png");
 const appIcon = nativeImage.createFromPath(iconPath);
-const scheduler = new ScheduledOrderScheduler(store, async (job) => {
-  const resolvedProtection = job.protection
-    ? await resolveProtection(client, {
-        epic: job.epic,
-        direction: job.direction,
-        protection: job.protection,
-      })
-    : null;
-
-  const position = await client.openMarketPosition(
-    {
-      epic: job.epic,
-      direction: job.direction,
-      size: job.size,
-      protection: job.protection ?? null,
-    },
-    resolvedProtection,
-  );
-
-  return {
-    position,
-    resolvedProtection,
-  };
-});
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -51,7 +26,7 @@ function createMainWindow(): BrowserWindow {
       preload: join(currentDir, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -73,10 +48,40 @@ app.whenReady().then(async () => {
     app.dock.setIcon(appIcon);
   }
 
+  const appStateBootstrap = await createAppStateStore();
+  const store = appStateBootstrap.store;
   const credentials = await createCredentialStore();
+  const scheduler = new ScheduledOrderScheduler(store, async (job) => {
+    const resolvedProtection = job.protection
+      ? await resolveProtection(client, {
+          epic: job.epic,
+          direction: job.direction,
+          protection: job.protection,
+        })
+      : null;
+
+    const position = await client.openMarketPosition(
+      {
+        epic: job.epic,
+        direction: job.direction,
+        size: job.size,
+        protection: job.protection ?? null,
+      },
+      resolvedProtection,
+    );
+
+    return {
+      position,
+      resolvedProtection,
+    };
+  });
 
   if (credentials.warning) {
     store.appendExecution(buildExecutionResult("auth", "info", credentials.warning));
+  }
+
+  if (appStateBootstrap.warning) {
+    store.appendExecution(buildExecutionResult("auth", "info", appStateBootstrap.warning));
   }
 
   scheduler.restore();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OpenPosition } from "../../shared/types";
-import { MemoryAppStateStore } from "./app-store";
+import { MemoryAppStateStore } from "../state/app-store";
 import { ScheduledOrderScheduler, type SchedulerClock } from "./scheduler";
 
 class FakeClock implements SchedulerClock {

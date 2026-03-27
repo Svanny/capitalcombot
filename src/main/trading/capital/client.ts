@@ -8,9 +8,9 @@ import type {
   ResolvedProtection,
   TradeDirection,
   TradingEnvironment,
-} from "../../shared/types";
-import { redactSensitiveText } from "../services/redaction";
-import type { HistoricalPriceBar } from "../services/protection";
+} from "../../../shared/types";
+import { redactSensitiveText } from "../../security/redaction";
+import type { HistoricalPriceBar } from "../protection";
 
 interface SessionTokens {
   cst: string;

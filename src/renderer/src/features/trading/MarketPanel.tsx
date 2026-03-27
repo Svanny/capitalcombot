@@ -1,7 +1,7 @@
 import type { MarketSummary, QuoteSnapshot } from "@shared/types";
 import type { FormEvent, RefObject } from "react";
-import { formatDateTime, formatNumber, formatPercent } from "../lib/formatters";
-import { WindowHelpButton } from "./WindowHelpButton";
+import { formatDateTime, formatNumber, formatPercent } from "../../lib/formatters";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface MarketPanelProps {
   connected: boolean;

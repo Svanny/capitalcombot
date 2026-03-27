@@ -1,6 +1,6 @@
 import type { ScheduledOrderJob } from "@shared/types";
-import { formatDateTime, formatTime } from "../lib/formatters";
-import { WindowHelpButton } from "./WindowHelpButton";
+import { formatDateTime, formatTime } from "../../lib/formatters";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface SchedulePanelProps {
   loadingCancel: boolean;

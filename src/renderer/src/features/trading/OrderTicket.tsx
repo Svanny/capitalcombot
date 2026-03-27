@@ -1,10 +1,10 @@
 import type { MarketSummary, ResolvedProtection, ScheduledOrderType, TradeDirection } from "@shared/types";
 import type { FormEvent, RefObject } from "react";
-import type { ProtectionFieldName, ProtectionFormState } from "../lib/protection-form";
-import { formatNumber } from "../lib/formatters";
-import type { OrderFieldName } from "../lib/validation";
-import { ProtectionStrategyFields } from "./ProtectionStrategyFields";
-import { WindowHelpButton } from "./WindowHelpButton";
+import type { ProtectionFieldName, ProtectionFormState } from "../../lib/protection-form";
+import { formatNumber } from "../../lib/formatters";
+import type { OrderFieldName } from "../../lib/validation";
+import { ProtectionStrategyFields } from "../../ui/ProtectionStrategyFields";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface OrderTicketProps {
   closeAt: string;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ipcMain } from "electron";
 import type {
   CapitalCredentials,
   MarketSummary,
@@ -7,9 +8,21 @@ import type {
   QuoteSnapshot,
   ScheduledOrderJob,
 } from "../shared/types";
-import { createIpcHandlers, type SchedulerLike, type TradingClientLike } from "./ipc";
-import { MemoryAppStateStore } from "./services/app-store";
-import { MemoryCredentialStore } from "./services/credential-store";
+import { IPC_CHANNELS } from "../shared/ipc";
+import {
+  createIpcHandlers,
+  registerIpcHandlers,
+  type SchedulerLike,
+  type TradingClientLike,
+} from "./ipc";
+import { MemoryCredentialStore } from "./security/credential-store";
+import { MemoryAppStateStore } from "./state/app-store";
+
+vi.mock("electron", () => ({
+  ipcMain: {
+    handle: vi.fn(),
+  },
+}));
 
 function buildOpenPosition(overrides: Partial<OpenPosition> = {}): OpenPosition {
   return {
@@ -362,5 +375,74 @@ describe("createIpcHandlers", () => {
     );
     expect(response.position?.stopLevel).not.toBeNull();
     expect(response.position?.profitLevel).not.toBeNull();
+  });
+
+  it("rejects invalid renderer payloads before they reach privileged order actions", async () => {
+    const client = createMockClient();
+    const handlers = createIpcHandlers({
+      client,
+      store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(),
+      scheduler: createMockScheduler(),
+    });
+
+    await expect(
+      handlers.openMarket({
+        epic: "",
+        direction: "BUY",
+        size: 1,
+      } as never),
+    ).rejects.toThrow(/INVALID_INPUT/);
+    expect(client.openMarketPosition).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed protection updates at the IPC boundary", async () => {
+    const client = createMockClient();
+    const handlers = createIpcHandlers({
+      client,
+      store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(),
+      scheduler: createMockScheduler(),
+    });
+
+    await expect(
+      handlers.updatePositionProtection({
+        dealId: "deal-1",
+        epic: "XAUUSD",
+        direction: "BUY",
+        protection: {
+          stopLoss: { mode: "distance", distance: -10 },
+          takeProfit: { mode: "risk_reward", riskRewardRatio: 2 },
+        },
+      } as never),
+    ).rejects.toThrow(/INVALID_INPUT/);
+    expect(client.updatePositionProtection).not.toHaveBeenCalled();
+  });
+
+  it("validates registered IPC payloads before dereferencing privileged identifiers", async () => {
+    vi.mocked(ipcMain.handle).mockClear();
+    const client = createMockClient();
+
+    await registerIpcHandlers({
+      client,
+      store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(),
+      scheduler: createMockScheduler(),
+    });
+
+    const registrations = new Map(vi.mocked(ipcMain.handle).mock.calls);
+    const close = registrations.get(IPC_CHANNELS.POSITIONS_CLOSE);
+    const reverse = registrations.get(IPC_CHANNELS.POSITIONS_REVERSE);
+    const cancel = registrations.get(IPC_CHANNELS.SCHEDULES_CANCEL);
+
+    expect(close).toBeTypeOf("function");
+    expect(reverse).toBeTypeOf("function");
+    expect(cancel).toBeTypeOf("function");
+
+    await expect(close?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    await expect(reverse?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    await expect(cancel?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    expect(client.closePosition).not.toHaveBeenCalled();
+    expect(client.reversePosition).not.toHaveBeenCalled();
   });
 });

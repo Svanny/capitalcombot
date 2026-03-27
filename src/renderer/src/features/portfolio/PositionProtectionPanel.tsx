@@ -1,8 +1,8 @@
 import type { OpenPosition, ResolvedProtection } from "@shared/types";
 import type { FormEvent, RefObject } from "react";
-import { type ProtectionFieldName, type ProtectionFormState } from "../lib/protection-form";
-import { ProtectionStrategyFields } from "./ProtectionStrategyFields";
-import { WindowHelpButton } from "./WindowHelpButton";
+import { type ProtectionFieldName, type ProtectionFormState } from "../../lib/protection-form";
+import { ProtectionStrategyFields } from "../../ui/ProtectionStrategyFields";
+import { WindowHelpButton } from "../../ui/WindowHelpButton";
 
 interface PositionProtectionPanelProps {
   editingPosition: OpenPosition | null;
