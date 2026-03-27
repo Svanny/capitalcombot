@@ -18,6 +18,16 @@
 
 This project is a focused Electron workspace for Capital.com trading. The current workflow is Gold-first, the interface is intentionally minimal, and the app keeps authentication and broker calls in the Electron main process instead of pushing them into the renderer.
 
+## Download
+
+[Download the latest release](https://github.com/Svanny/capitalcombot/releases/latest)
+
+- macOS: download the DMG that matches your Mac architecture (`arm64` for Apple Silicon, `x64` for Intel)
+- Windows: download the NSIS `.exe` installer for `x64`
+- Linux: download either the `AppImage` or the `.deb` package for `x64`
+
+Release notes now call out which platforms are signed or unsigned. If signing credentials are unavailable for a given release, the binary is still published, but the operating system may show extra trust warnings during install.
+
 ## Three Tabs, One Job
 
 `Setup` gets the account and primary market ready.
@@ -104,6 +114,18 @@ pnpm test
 pnpm build
 ```
 
+## Release Automation
+
+GitHub Actions is the primary release path. Pushing a semantic version tag publishes installers to GitHub Releases for macOS, Windows, and Linux.
+
+Maintainer steps:
+
+1. Update `package.json` to the new version.
+2. Commit and push the version bump.
+3. Create and push a tag like `v0.1.1`.
+4. Wait for the `release` GitHub Actions workflow to finish.
+5. Check the GitHub Release page for uploaded installers and `SHA256SUMS`.
+
 ## Runtime Notes
 
 - Scheduled orders execute only while the desktop app is running
@@ -114,12 +136,21 @@ pnpm build
 ## Packaging
 
 ```bash
+pnpm package:linux
+pnpm package:win:native
 pnpm package:mac
 pnpm package:win
 pnpm package:all
 ```
 
-Release artifacts are written to `release/`. Unsigned release builds are refused by default. Local-only unsigned builds require `ALLOW_UNSIGNED_PACKAGING=1`.
+Release artifacts are written to `release/`.
+
+- `pnpm package:linux` builds Linux `AppImage` and `.deb` artifacts on Linux
+- `pnpm package:win:native` builds a Windows NSIS installer on Windows
+- `pnpm package:win` keeps the Docker/Wine path for macOS or Linux maintainers cross-building Windows locally
+- `pnpm package:mac` builds a DMG on macOS
+
+Signed packaging is used automatically when the relevant credentials are present. Local-only unsigned macOS or Windows builds still require `ALLOW_UNSIGNED_PACKAGING=1`.
 
 ## Security Docs
 

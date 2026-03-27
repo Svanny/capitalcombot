@@ -12,6 +12,8 @@
     "dev:plain": "electron-vite dev",
     "build": "tsc --noEmit && electron-vite build",
     "package:mac": "bash scripts/package-mac.sh",
+    "package:linux": "bash scripts/package-linux.sh",
+    "package:win:native": "node scripts/package-win-native.mjs",
     "package:win": "bash scripts/package-win-docker.sh",
     "package:all": "pnpm package:mac && pnpm package:win",
     "preview": "electron-vite preview",

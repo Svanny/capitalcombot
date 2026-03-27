@@ -29,6 +29,13 @@ win:
     - nsis
   icon: build-resources/icon.png
 
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  icon: build-resources/icon.png
+
 nsis:
   oneClick: false
   perMachine: false

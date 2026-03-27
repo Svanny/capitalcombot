@@ -1,0 +1,220 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: package-${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            platform: mac
+            arch: x64
+          - runner: macos-14
+            platform: mac
+            arch: arm64
+          - runner: windows-latest
+            platform: win
+            arch: x64
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: pnpm
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        shell: bash
+        run: pnpm test
+
+      - name: Package macOS release
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CSC_LINK:-}" || -z "${CSC_KEY_PASSWORD:-}" ]]; then
+            export ALLOW_UNSIGNED_PACKAGING=1
+          fi
+          bash scripts/package-mac.sh
+
+      - name: Package Windows release
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${WIN_CSC_LINK:-${CSC_LINK:-}}" || -z "${WIN_CSC_KEY_PASSWORD:-${CSC_KEY_PASSWORD:-}}" ]]; then
+            export ALLOW_UNSIGNED_PACKAGING=1
+          fi
+          pnpm package:win:native
+
+      - name: Package Linux release
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: bash scripts/package-linux.sh
+
+      - name: Collect packaged artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "${{ matrix.platform }}" in
+            mac)
+              cp release/*.dmg dist/
+              ;;
+            win)
+              cp release/*.exe dist/
+              ;;
+            linux)
+              cp release/*.AppImage dist/
+              cp release/*.deb dist/
+              ;;
+            *)
+              echo "Unknown platform ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+          ls -la dist
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: publish-release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Verify artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la dist
+          test -n "$(find dist -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$(find dist -maxdepth 1 -name '*.exe' -print -quit)"
+          test -n "$(find dist -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$(find dist -maxdepth 1 -name '*.deb' -print -quit)"
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum * > SHA256SUMS
+
+      - name: Build release notes
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          mac_signed="no"
+          mac_notarized="no"
+          windows_signed="no"
+
+          if [[ -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" ]]; then
+            mac_signed="yes"
+          fi
+
+          if [[ -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" && -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+            mac_notarized="yes"
+          fi
+
+          if [[ -n "${WIN_CSC_LINK:-${CSC_LINK:-}}" && -n "${WIN_CSC_KEY_PASSWORD:-${CSC_KEY_PASSWORD:-}}" ]]; then
+            windows_signed="yes"
+          fi
+
+          notes_path="${RUNNER_TEMP}/release-notes.md"
+
+          {
+            echo "## Downloads"
+            echo
+            echo "- macOS: DMG builds for Intel and Apple Silicon"
+            echo "- Windows: NSIS installer for x64"
+            echo "- Linux: AppImage and .deb packages for x64"
+            echo
+            echo "## Signing status"
+            echo
+            echo "- macOS signing: ${mac_signed}"
+            echo "- macOS notarization: ${mac_notarized}"
+            echo "- Windows signing: ${windows_signed}"
+            echo "- Linux signing: no (standard unsigned Linux desktop artifacts)"
+            echo
+            echo "If a platform shows unsigned, the installer is still published, but the operating system may display extra trust warnings during install."
+            echo
+            echo "## Included files"
+            echo
+            echo "- Release artifacts for all supported desktop platforms"
+            echo "- SHA256SUMS for every attached asset"
+          } > "${notes_path}"
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          notes_path="${RUNNER_TEMP}/release-notes.md"
+          title="Capital.com Trading Assistant ${RELEASE_TAG}"
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" --title "${title}" --notes-file "${notes_path}"
+          else
+            gh release create "${RELEASE_TAG}" --title "${title}" --notes-file "${notes_path}"
+          fi
+
+          gh release upload "${RELEASE_TAG}" dist/* --clobber
