@@ -1,114 +1,144 @@
 # Capital.com Trading Assistant
 
-Electron desktop app for placing Capital.com market orders, scheduling delayed market orders, and managing open-position protection from a local desktop client. The current workflow is still primarily optimized for Gold discovery and Gold-first trading setups.
+<p align="center">
+  <img src="./gold_die_logo.png" alt="Capital.com Trading Assistant logo" width="120" />
+</p>
 
-## Current Features
+<p align="center">
+  A local desktop trading client for Capital.com.
+</p>
 
-- Capital.com demo/live login handled in the Electron main process
-- Capital.com market search and selection through the Capital.com API, with Gold as the primary workflow
-- Immediate market buy/sell orders
+<p align="center">
+  Connect, pick a market, place an order, queue it for later, and manage protection without living in a browser tab.
+</p>
+
+<p align="center">
+  <img src="./docs/images/trading-screen.png" alt="Capital.com Trading Assistant trading screen" width="100%" />
+</p>
+
+This project is a focused Electron workspace for Capital.com trading. The current workflow is Gold-first, the interface is intentionally minimal, and the app keeps authentication and broker calls in the Electron main process instead of pushing them into the renderer.
+
+## Three Tabs, One Job
+
+`Setup` gets the account and primary market ready.
+
+`Trading` handles immediate orders, delayed orders, and stop-loss or take-profit strategy inputs in one screen.
+
+`Portfolio` is where open positions and scheduled jobs stay visible after the order is placed.
+
+## What It Actually Does
+
+- Capital.com demo and live login from a desktop app
+- Primary instrument search and selection
+- Immediate market buy and sell orders
 - One-off and repeating scheduled market orders
-- Stop-loss and take-profit strategy inputs with live preview
-- Open-position close, reverse, and protection update actions
-- Local execution log and scheduled-order persistence
-- macOS keychain integration through `keytar`, with in-memory fallback when unavailable
-- Hot reload in development with `electron-vite`
+- Stop-loss and take-profit strategy preview
+- Position close, reverse, and protection update actions
+- Local execution log and scheduled-order tracking
+- macOS keychain-backed saved credentials when `keytar` is available
 
-## Requirements
+## Product Walkthrough
 
-- macOS for local app development and DMG packaging
+### Setup
+
+<p align="center">
+  <img src="./docs/images/setup-screen.png" alt="Setup screen" width="100%" />
+</p>
+
+The setup tab handles connection state, environment selection, saved profile reuse, and the primary instrument picker. The app is optimized around Gold, but it can search other Capital.com instruments once connected.
+
+### Trading
+
+<p align="center">
+  <img src="./docs/images/trading-screen.png" alt="Trading screen" width="100%" />
+</p>
+
+The trading tab keeps the ticket compact: direction, size, protection strategy, optional scheduling, and the activity log all sit together so trade intent and execution history are visible in the same place.
+
+### Portfolio
+
+<p align="center">
+  <img src="./docs/images/portfolio-screen.png" alt="Portfolio screen" width="100%" />
+</p>
+
+The portfolio tab is the follow-through screen. It shows open positions, scheduled jobs, and the actions you need after the trade is live.
+
+## Quick Start
+
+### Requirements
+
+- macOS for local development and DMG packaging
 - Node.js 25+
 - `pnpm`
 - A Capital.com account with API access enabled
 - Capital.com account identifier, API password, and API key
 
-## Development
-
-Install dependencies:
+### Install
 
 ```bash
 pnpm install
 ```
 
-This repo declares the native packages that must be allowed to run PNPM install scripts, so a fresh install should fetch the Electron binary and build native modules automatically. If an older local install still fails with `Electron failed to install correctly`, run:
+If an older install fails with `Electron failed to install correctly`, run:
 
 ```bash
 pnpm approve-builds --all
 pnpm install
 ```
 
-Run tests:
-
-```bash
-pnpm test
-```
-
-Run the desktop app with hot reload:
+### Run
 
 ```bash
 pnpm dev
 ```
 
-`pnpm dev` runs `electron-vite dev --watch`, so renderer edits use Vite HMR and main/preload edits trigger Electron restart or reload during development.
+### Test
 
-Build the production app bundles:
+```bash
+pnpm test
+```
+
+### Build
 
 ```bash
 pnpm build
 ```
 
-## Security Docs
+## Runtime Notes
 
-- Repo security audit artifacts now live under `docs/security/`.
-- Current tracked files:
-  - `docs/security/capitalcombot-threat-model.md`
-  - `docs/security/security_best_practices_report.md`
-  - `docs/security/ownership-sensitive.csv`
-  - `docs/security/ownership-map-out/`
+- Scheduled orders execute only while the desktop app is running
+- Secrets are stored in the macOS keychain when `keytar` is available
+- If `keytar` is unavailable, credentials fall back to memory for the current session only
+- Non-secret local UI state is persisted only when secure state-integrity storage is available
 
 ## Packaging
 
-Installer artifacts are generated locally and are not committed to the repository. Output goes to `release/`.
-
-Build a signed macOS DMG:
-
 ```bash
 pnpm package:mac
-```
-
-Build a signed Windows NSIS `.exe` from macOS/Linux through Docker/Wine:
-
-```bash
 pnpm package:win
-```
-
-Build both:
-
-```bash
 pnpm package:all
 ```
 
-### Packaging Notes
+Release artifacts are written to `release/`. Unsigned release builds are refused by default. Local-only unsigned builds require `ALLOW_UNSIGNED_PACKAGING=1`.
 
-- macOS packaging does not require Docker.
-- Windows packaging on macOS/Linux requires Docker Desktop running and uses `electronuserland/builder:wine`.
-- The packaging scripts rebuild Electron-native dependencies such as `keytar` for the target platform before bundling so saved-credential support remains available in packaged apps.
-- If Windows cross-builds fail on a specific machine or CI image because of native-module tooling, use a Windows build host.
-- Packaging now refuses unsigned release builds by default.
-- For signed packaging, provide platform signing credentials through the standard Electron Builder environment variables:
-  - macOS: `CSC_LINK` and `CSC_KEY_PASSWORD`
-  - Windows: `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` (or `CSC_LINK` / `CSC_KEY_PASSWORD`)
-- For local-only testing builds, set `ALLOW_UNSIGNED_PACKAGING=1` to opt into an unsigned artifact intentionally.
+## Security Docs
 
-## Runtime Notes
+- [Threat model](./docs/security/capitalcombot-threat-model.md)
+- [Best practices report](./docs/security/security_best_practices_report.md)
+- [Ownership sensitivity config](./docs/security/ownership-sensitive.csv)
+- [Ownership outputs](./docs/security/ownership-map-out)
 
-- Scheduled orders execute only while the desktop app is running.
-- Non-secret local UI state is persisted with `electron-store` only when secure state-integrity storage is available.
-- Secrets are kept in the macOS keychain when `keytar` is available.
-- If `keytar` is unavailable, the app falls back to in-memory credentials and session-only app state for the current session only.
+## Repository Layout
+
+```text
+src/main       Electron main process, IPC, trading, state, and security services
+src/preload    Renderer-safe desktop API bridge
+src/renderer   React app and UI
+src/shared     Shared IPC contracts and types
+docs/security  Audit artifacts
+scripts        Packaging helpers
+```
 
 ## License
-
-Copyright © 2026 Svanny.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE).
