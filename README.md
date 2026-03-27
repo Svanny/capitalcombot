@@ -50,17 +50,26 @@ Build the production app bundles:
 pnpm build
 ```
 
+## Security Docs
+
+- Repo security audit artifacts now live under `docs/security/`.
+- Current tracked files:
+  - `docs/security/capitalcombot-threat-model.md`
+  - `docs/security/security_best_practices_report.md`
+  - `docs/security/ownership-sensitive.csv`
+  - `docs/security/ownership-map-out/`
+
 ## Packaging
 
 Installer artifacts are generated locally and are not committed to the repository. Output goes to `release/`.
 
-Build an unsigned macOS DMG:
+Build a signed macOS DMG:
 
 ```bash
 pnpm package:mac
 ```
 
-Build an unsigned Windows NSIS `.exe` from macOS/Linux through Docker/Wine:
+Build a signed Windows NSIS `.exe` from macOS/Linux through Docker/Wine:
 
 ```bash
 pnpm package:win
@@ -78,14 +87,18 @@ pnpm package:all
 - Windows packaging on macOS/Linux requires Docker Desktop running and uses `electronuserland/builder:wine`.
 - The packaging scripts rebuild Electron-native dependencies such as `keytar` for the target platform before bundling so saved-credential support remains available in packaged apps.
 - If Windows cross-builds fail on a specific machine or CI image because of native-module tooling, use a Windows build host.
-- Installers in this pass are unsigned and not notarized.
+- Packaging now refuses unsigned release builds by default.
+- For signed packaging, provide platform signing credentials through the standard Electron Builder environment variables:
+  - macOS: `CSC_LINK` and `CSC_KEY_PASSWORD`
+  - Windows: `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` (or `CSC_LINK` / `CSC_KEY_PASSWORD`)
+- For local-only testing builds, set `ALLOW_UNSIGNED_PACKAGING=1` to opt into an unsigned artifact intentionally.
 
 ## Runtime Notes
 
 - Scheduled orders execute only while the desktop app is running.
-- Non-secret local UI state is persisted with `electron-store`.
+- Non-secret local UI state is persisted with `electron-store` only when secure state-integrity storage is available.
 - Secrets are kept in the macOS keychain when `keytar` is available.
-- If `keytar` is unavailable, the app falls back to in-memory credentials for the current session only.
+- If `keytar` is unavailable, the app falls back to in-memory credentials and session-only app state for the current session only.
 
 ## License
 

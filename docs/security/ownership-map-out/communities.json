@@ -1,0 +1,81 @@
+[
+  {
+    "id": 1,
+    "size": 11,
+    "files": [
+      "src/main/index.ts",
+      "src/renderer/index.html",
+      "src/renderer/src/App.test.tsx",
+      "src/renderer/src/App.tsx",
+      "src/renderer/src/components/ConnectionPanel.tsx",
+      "src/renderer/src/components/HeaderBar.tsx",
+      "src/renderer/src/components/MarketPanel.tsx",
+      "src/renderer/src/components/OrderTicket.tsx",
+      "src/renderer/src/components/PositionsPanel.tsx",
+      "src/renderer/src/lib/validation.test.ts",
+      "src/renderer/src/lib/validation.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "lymonysovann+github@gmail.com",
+        "name": "Svanny",
+        "touches": 11,
+        "touch_share": 0.5,
+        "recency_share": 0.5001,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+07:00"
+      },
+      {
+        "person_id": "lymonysovann@gmail.com",
+        "name": "svanny",
+        "touches": 11,
+        "touch_share": 0.5,
+        "recency_share": 0.4999,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+07:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 22,
+      "recency_weight": 21.954755,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 2,
+    "size": 2,
+    "files": [
+      "README.md",
+      "package.json"
+    ],
+    "maintainers": [
+      {
+        "person_id": "lymonysovann+github@gmail.com",
+        "name": "Svanny",
+        "touches": 2,
+        "touch_share": 0.5,
+        "recency_share": 0.5001,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+07:00"
+      },
+      {
+        "person_id": "lymonysovann@gmail.com",
+        "name": "svanny",
+        "touches": 2,
+        "touch_share": 0.5,
+        "recency_share": 0.4999,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "+07:00"
+      }
+    ],
+    "bus_factor": 2,
+    "owner_count": 2,
+    "totals": {
+      "touches": 4,
+      "recency_weight": 3.991776,
+      "sensitive_weight": 0
+    }
+  }
+]

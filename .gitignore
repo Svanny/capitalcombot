@@ -1,4 +1,8 @@
 node_modules
+.pnpm-store
+.pnpm-debug.log*
 out
 release
+coverage
+.vite
 .DS_Store

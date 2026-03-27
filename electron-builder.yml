@@ -23,10 +23,6 @@ mac:
     - dmg
   category: public.app-category.finance
   icon: build-resources/icon.png
-  identity: null
-
-dmg:
-  sign: false
 
 win:
   target:

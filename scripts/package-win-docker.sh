@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${ALLOW_UNSIGNED_PACKAGING:-0}" != "1" ]] && [[ -z "${WIN_CSC_LINK:-${CSC_LINK:-}}" || -z "${WIN_CSC_KEY_PASSWORD:-${CSC_KEY_PASSWORD:-}}" ]]; then
+  echo "Refusing unsigned Windows packaging. Set WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD (or CSC_LINK/CSC_KEY_PASSWORD) for a signed build, or ALLOW_UNSIGNED_PACKAGING=1 for a local-only unsigned build." >&2
+  exit 1
+fi
+
+win_csc_link="${WIN_CSC_LINK:-${CSC_LINK:-}}"
+win_csc_key_password="${WIN_CSC_KEY_PASSWORD:-${CSC_KEY_PASSWORD:-}}"
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker Desktop is required for Windows packaging on macOS/Linux." >&2
   exit 1
@@ -19,6 +27,10 @@ node_modules_volume="${project_name}-node-modules"
 docker run --rm -t \
   -e ELECTRON_CACHE=/root/.cache/electron \
   -e ELECTRON_BUILDER_CACHE=/root/.cache/electron-builder \
+  -e WIN_CSC_LINK="${win_csc_link}" \
+  -e WIN_CSC_KEY_PASSWORD="${win_csc_key_password}" \
+  -e CSC_LINK="${CSC_LINK:-${win_csc_link}}" \
+  -e CSC_KEY_PASSWORD="${CSC_KEY_PASSWORD:-${win_csc_key_password}}" \
   -v "${PWD}:/project" \
   -v "${node_modules_volume}:/project/node_modules" \
   -v "${HOME}/.cache/electron:/root/.cache/electron" \

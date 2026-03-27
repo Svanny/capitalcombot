@@ -1,0 +1,205 @@
+{
+  "generated_at": "2026-03-27T01:55:33.821087+00:00",
+  "repo": "/Users/svanny/capitalcombot",
+  "parameters": {
+    "since": "12 months ago",
+    "until": null,
+    "half_life_days": 180.0,
+    "bus_factor_threshold": 1,
+    "stale_days": 365,
+    "owner_threshold": 0.5,
+    "sensitive_config": "ownership-sensitive.csv",
+    "identity": "author",
+    "date_field": "author",
+    "include_merges": false,
+    "cochange_enabled": true,
+    "cochange_max_files": 50,
+    "cochange_min_count": 2,
+    "cochange_min_jaccard": 0.05,
+    "cochange_default_excludes": true,
+    "cochange_excludes": [
+      "**/Cargo.lock",
+      "**/Cargo.toml",
+      "**/package-lock.json",
+      "**/yarn.lock",
+      "**/pnpm-lock.yaml",
+      "**/go.sum",
+      "**/go.mod",
+      "**/Gemfile.lock",
+      "**/Pipfile.lock",
+      "**/poetry.lock",
+      "**/composer.lock",
+      "**/.github/**",
+      "**/.gitignore",
+      "**/.gitattributes",
+      "**/.gitmodules",
+      "**/.editorconfig",
+      "**/.vscode/**",
+      "**/.idea/**"
+    ],
+    "author_default_excludes": true,
+    "author_exclude_regexes": [
+      "dependabot"
+    ],
+    "community_top_owners": 5
+  },
+  "orphaned_sensitive_code": [],
+  "hidden_owners": [
+    {
+      "person": "lymonysovann+github@gmail.com",
+      "name": "Svanny",
+      "controls": "100% of packaging code",
+      "category": "packaging",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of capital_client code",
+      "category": "capital_client",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of ipc_boundary code",
+      "category": "ipc_boundary",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of persistence code",
+      "category": "persistence",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of credentials code",
+      "category": "credentials",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of scheduling code",
+      "category": "scheduling",
+      "share": 1.0
+    },
+    {
+      "person": "lymonysovann@gmail.com",
+      "name": "svanny",
+      "controls": "100% of preload_bridge code",
+      "category": "preload_bridge",
+      "share": 1.0
+    }
+  ],
+  "bus_factor_hotspots": [
+    {
+      "path": "electron-builder.yml",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T21:32:06+07:00",
+      "sensitivity_tags": [
+        "packaging"
+      ],
+      "top_owner": "lymonysovann+github@gmail.com"
+    },
+    {
+      "path": "scripts/package-mac.sh",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T21:32:06+07:00",
+      "sensitivity_tags": [
+        "packaging"
+      ],
+      "top_owner": "lymonysovann+github@gmail.com"
+    },
+    {
+      "path": "scripts/package-win-docker.sh",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T21:32:06+07:00",
+      "sensitivity_tags": [
+        "packaging"
+      ],
+      "top_owner": "lymonysovann+github@gmail.com"
+    },
+    {
+      "path": "src/main/capital/client.test.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "capital_client"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/main/capital/client.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "capital_client"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/main/ipc.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "ipc_boundary"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/main/services/app-store.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "persistence"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/main/services/credential-store.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "credentials"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/main/services/scheduler.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "scheduling"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    },
+    {
+      "path": "src/preload/index.ts",
+      "bus_factor": 1,
+      "last_touch": "2026-03-26T18:39:41+07:00",
+      "sensitivity_tags": [
+        "preload_bridge"
+      ],
+      "top_owner": "lymonysovann@gmail.com"
+    }
+  ],
+  "stats": {
+    "commits": 3,
+    "commits_seen": 3,
+    "commits_excluded_identities": 0,
+    "commits_excluded_merges": 0,
+    "edges": 67,
+    "people": 2,
+    "files": 52,
+    "cochange_pairs_total": 973,
+    "cochange_edges": 56,
+    "cochange_commits_used": 3,
+    "cochange_commits_skipped": 0,
+    "cochange_commits_filtered": 0,
+    "cochange_files_excluded": 4
+  }
+}

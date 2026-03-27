@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${ALLOW_UNSIGNED_PACKAGING:-0}" != "1" ]] && [[ -z "${CSC_LINK:-}" || -z "${CSC_KEY_PASSWORD:-}" ]]; then
+  echo "Refusing unsigned macOS packaging. Set CSC_LINK and CSC_KEY_PASSWORD for a signed build, or ALLOW_UNSIGNED_PACKAGING=1 for a local-only unsigned build." >&2
+  exit 1
+fi
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "macOS packaging must run on macOS." >&2
   exit 1

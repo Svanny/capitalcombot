@@ -1,0 +1,9 @@
+# pattern,tag,weight
+src/main/trading/capital/**,capital_client,1.0
+src/main/ipc.ts,ipc_boundary,1.0
+src/preload/**,preload_bridge,1.0
+src/main/security/credential-store.ts,credentials,1.0
+src/main/state/app-store.ts,persistence,0.9
+src/main/trading/scheduler.ts,scheduling,0.9
+electron-builder.yml,packaging,0.7
+scripts/package-*.sh,packaging,0.7
