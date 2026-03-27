@@ -97,6 +97,11 @@ describe("packaging configuration", () => {
     expect(workflow).toContain('windows-latest');
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('sha256sum * > SHA256SUMS');
+    expect(workflow).toContain('RELEASE_REPO: ${{ github.repository }}');
+    expect(workflow).toContain('gh release view "${RELEASE_TAG}" --repo "${RELEASE_REPO}"');
+    expect(workflow).toContain('gh release edit "${RELEASE_TAG}" --repo "${RELEASE_REPO}"');
+    expect(workflow).toContain('gh release create "${RELEASE_TAG}" --repo "${RELEASE_REPO}"');
+    expect(workflow).toContain('gh release upload "${RELEASE_TAG}" dist/* --repo "${RELEASE_REPO}" --clobber');
     expect(workflow).toContain('gh release upload');
   });
 
