@@ -16,10 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             platform: mac
             arch: x64
-          - runner: macos-14
+          - runner: macos-15
             platform: mac
             arch: arm64
           - runner: windows-latest
@@ -64,6 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${CSC_LINK:-}" || -z "${CSC_KEY_PASSWORD:-}" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             export ALLOW_UNSIGNED_PACKAGING=1
           fi
           bash scripts/package-mac.sh
@@ -79,6 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${WIN_CSC_LINK:-${CSC_LINK:-}}" || -z "${WIN_CSC_KEY_PASSWORD:-${CSC_KEY_PASSWORD:-}}" ]]; then
+            unset WIN_CSC_LINK WIN_CSC_KEY_PASSWORD CSC_LINK CSC_KEY_PASSWORD
             export ALLOW_UNSIGNED_PACKAGING=1
           fi
           pnpm package:win:native

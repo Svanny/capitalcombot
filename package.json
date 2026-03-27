@@ -2,7 +2,18 @@
   "name": "capitalcombot",
   "version": "0.1.0",
   "description": "Electron desktop app for Capital.com instrument trading, primarily optimized for Gold workflows, with scheduled orders and protection strategies.",
-  "author": "Svanny",
+  "author": {
+    "name": "Svanny",
+    "email": "svanny@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/Svanny/capitalcombot",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Svanny/capitalcombot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Svanny/capitalcombot/issues"
+  },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.32.1",
   "type": "module",

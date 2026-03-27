@@ -67,17 +67,48 @@ describe("packaging configuration", () => {
     expect(script).toContain('"electron-builder", "--win", "nsis", "--x64"');
   });
 
+  it("defines release metadata required for Linux deb packaging", () => {
+    const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+
+    expect(packageJson.homepage).toBe("https://github.com/Svanny/capitalcombot");
+    expect(packageJson.repository).toEqual({
+      type: "git",
+      url: "https://github.com/Svanny/capitalcombot.git",
+    });
+    expect(packageJson.bugs).toEqual({
+      url: "https://github.com/Svanny/capitalcombot/issues",
+    });
+    expect(packageJson.author).toEqual({
+      name: "Svanny",
+      email: "svanny@users.noreply.github.com",
+    });
+  });
+
   it("defines a tag-driven GitHub release workflow with checksums", () => {
     const workflow = readFileSync(resolve(root, ".github/workflows/release.yml"), "utf8");
 
     expect(workflow).toContain('name: release');
     expect(workflow).toContain('tags:');
     expect(workflow).toContain('"v*.*.*"');
-    expect(workflow).toContain('macos-13');
-    expect(workflow).toContain('macos-14');
+    expect(workflow).toContain('macos-15-intel');
+    expect(workflow).toContain('macos-15');
     expect(workflow).toContain('windows-latest');
     expect(workflow).toContain('ubuntu-latest');
     expect(workflow).toContain('sha256sum * > SHA256SUMS');
     expect(workflow).toContain('gh release upload');
+  });
+
+  it("clears partial macOS signing env before unsigned fallback packaging", () => {
+    const workflow = readFileSync(resolve(root, ".github/workflows/release.yml"), "utf8");
+
+    expect(workflow).toContain('unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID');
+    expect(workflow).toContain('export ALLOW_UNSIGNED_PACKAGING=1');
+  });
+
+  it("clears partial Windows signing env before unsigned fallback packaging", () => {
+    const workflow = readFileSync(resolve(root, ".github/workflows/release.yml"), "utf8");
+
+    expect(workflow).toContain('unset WIN_CSC_LINK WIN_CSC_KEY_PASSWORD CSC_LINK CSC_KEY_PASSWORD');
+    expect(workflow).toContain('export ALLOW_UNSIGNED_PACKAGING=1');
   });
 });
