@@ -62,9 +62,11 @@ describe("packaging configuration", () => {
     expect(packageJson.scripts["package:win:native"]).toBe("node scripts/package-win-native.mjs");
     expect(script).toContain('ALLOW_UNSIGNED_PACKAGING');
     expect(script).toContain("Native Windows packaging must run on Windows.");
-    expect(script).toContain('"electron-builder", "install-app-deps"');
-    expect(script).toContain('"--platform=win32", "--arch=x64"');
-    expect(script).toContain('"electron-builder", "--win", "nsis", "--x64"');
+    expect(script).toContain('process.env.ComSpec || "cmd.exe"');
+    expect(script).toContain('"/d", "/s", "/c"');
+    expect(script).toContain('result.error');
+    expect(script).toContain('["exec", "electron-builder", "install-app-deps", "--platform=win32", "--arch=x64"]');
+    expect(script).toContain('["exec", "electron-builder", "--win", "nsis", "--x64", "--config", "electron-builder.yml", "--publish", "never"]');
   });
 
   it("defines release metadata required for Linux deb packaging", () => {

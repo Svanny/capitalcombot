@@ -28,10 +28,21 @@ run(["exec", "electron-builder", "install-app-deps", "--platform=win32", "--arch
 run(["exec", "electron-builder", "--win", "nsis", "--x64", "--config", "electron-builder.yml", "--publish", "never"]);
 
 function run(args) {
-  const result = spawnSync(pnpmCommand, args, {
-    cwd: root,
-    stdio: "inherit",
-  });
+  const result =
+    process.platform === "win32"
+      ? spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `${pnpmCommand} ${args.join(" ")}`], {
+          cwd: root,
+          stdio: "inherit",
+        })
+      : spawnSync(pnpmCommand, args, {
+          cwd: root,
+          stdio: "inherit",
+        });
+
+  if (result.error) {
+    console.error(result.error.message);
+    process.exit(1);
+  }
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
