@@ -334,8 +334,7 @@ export default function App() {
     setActiveTab((current) => (TAB_ORDER.includes(current) ? current : state.connected ? "trade" : "setup"));
     setAuthForm((current) => ({
       ...current,
-      identifier: state.savedProfile?.identifier ?? current.identifier,
-      environment: state.savedProfile?.environment ?? state.environment,
+      environment: state.environment,
     }));
   }
 

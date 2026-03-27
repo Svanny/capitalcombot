@@ -36,6 +36,11 @@ export function ConnectionPanel({
   selectedMarket,
   statusMessage,
 }: ConnectionPanelProps) {
+  const accountDraft = authForm.identifier.trim();
+  const accountSummary = accountDraft
+    || (connected ? savedProfile?.identifier : null)
+    || (savedProfile ? "Saved account available" : "Awaiting account input");
+
   return (
     <section className="window section-window">
       <div className="title-bar">
@@ -59,7 +64,7 @@ export function ConnectionPanel({
           />
           <SummaryItem
             label="Account"
-            value={savedProfile?.identifier ?? (authForm.identifier || "No saved account")}
+            value={accountSummary}
           />
           <SummaryItem label="Environment" value={authForm.environment.toUpperCase()} />
           <SummaryItem label="Market" value={selectedMarket?.epic ?? "No primary market selected"} />

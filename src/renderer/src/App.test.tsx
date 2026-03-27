@@ -26,6 +26,14 @@ const disconnectedBootstrap: BootstrapState = {
   savedProfile: null,
 };
 
+const disconnectedWithSavedBootstrap: BootstrapState = {
+  ...disconnectedBootstrap,
+  savedProfile: {
+    identifier: "saved@example.com",
+    environment: "live",
+  },
+};
+
 const connectedBootstrap: BootstrapState = {
   connected: true,
   environment: "demo",
@@ -209,6 +217,29 @@ describe("App", () => {
 
     expect(screen.getByRole("dialog", { name: "Account Session help" })).toBeInTheDocument();
     expect(screen.getByText("Connection details and saved account.")).toBeInTheDocument();
+  });
+
+  it("keeps the auth form editable and updates the summary from live input instead of saved data", async () => {
+    window.capitalApi = buildApi(disconnectedWithSavedBootstrap);
+
+    render(<App />);
+
+    const identifierInput = await screen.findByLabelText("Account identifier");
+
+    expect(identifierInput).toHaveValue("");
+    expect(screen.queryByText("saved@example.com")).not.toBeInTheDocument();
+    expect(screen.getByText("Saved account available")).toBeInTheDocument();
+    expect(screen.getByText("DEMO")).toBeInTheDocument();
+
+    fireEvent.change(identifierInput, {
+      target: { value: "live-trader@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "live" },
+    });
+
+    expect(screen.getByText("live-trader@example.com")).toBeInTheDocument();
+    expect(screen.getByText("LIVE")).toBeInTheDocument();
   });
 
   it("keeps setup editable after connected bootstrap", async () => {
