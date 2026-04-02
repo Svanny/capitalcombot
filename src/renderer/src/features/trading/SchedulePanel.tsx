@@ -102,7 +102,7 @@ export function SchedulePanel({
 
               return (
                 <article key={job.id} className="schedule-card">
-                  <div>
+                  <div className="schedule-card-header">
                     <strong>
                       {job.direction} {formatOrderSize(job.size)} {job.instrumentName}
                     </strong>
@@ -143,93 +143,111 @@ export function SchedulePanel({
                   ) : null}
                   {isEditing ? (
                     <form className="schedule-edit-form" onSubmit={onEditSubmit} noValidate>
-                      <fieldset>
-                        <legend>Edit scheduled order</legend>
-                        <div className="field-row">
-                          <input
-                            id={`schedule-edit-buy-${job.id}`}
-                            type="radio"
-                            name={`schedule-direction-${job.id}`}
-                            checked={editDirection === "BUY"}
-                            onChange={() => onEditDirectionChange("BUY")}
-                          />
-                          <label htmlFor={`schedule-edit-buy-${job.id}`}>Buy</label>
+                      <div className="schedule-edit-header">
+                        <div>
+                          <strong>Edit pending order</strong>
+                          <p>Adjust direction, size, timing, or protection before the next run.</p>
                         </div>
-                        <div className="field-row">
-                          <input
-                            id={`schedule-edit-sell-${job.id}`}
-                            type="radio"
-                            name={`schedule-direction-${job.id}`}
-                            checked={editDirection === "SELL"}
-                            onChange={() => onEditDirectionChange("SELL")}
-                          />
-                          <label htmlFor={`schedule-edit-sell-${job.id}`}>Sell</label>
+                        <div className="schedule-edit-meta">
+                          {job.instrumentName} · {job.scheduleType === "repeating" ? "Repeating" : "One-off"}
                         </div>
-                      </fieldset>
-
-                      <div className={editErrors.size ? "field-shell has-error" : "field-shell"}>
-                        <div className="field-row-stacked">
-                          <label htmlFor={`schedule-size-${job.id}`}>
-                            Size
-                          </label>
-                          <input
-                            id={`schedule-size-${job.id}`}
-                            ref={refs.size}
-                            aria-invalid={Boolean(editErrors.size)}
-                            inputMode="decimal"
-                            min="0.01"
-                            step="0.01"
-                            type="number"
-                            value={editSize}
-                            onChange={(event) => onEditSizeChange(event.target.value)}
-                          />
-                        </div>
-                        {editErrors.size ? <p className="field-error">{editErrors.size}</p> : null}
                       </div>
 
-                      <fieldset>
-                        <legend>Schedule type</legend>
-                        <div className="field-row">
-                          <input
-                            id={`schedule-type-one-off-${job.id}`}
-                            type="radio"
-                            name={`schedule-type-${job.id}`}
-                            checked={editScheduleType === "one-off"}
-                            onChange={() => onEditScheduleTypeChange("one-off")}
-                          />
-                          <label htmlFor={`schedule-type-one-off-${job.id}`}>One-off</label>
-                        </div>
-                        <div className="field-row">
-                          <input
-                            id={`schedule-type-repeating-${job.id}`}
-                            type="radio"
-                            name={`schedule-type-${job.id}`}
-                            checked={editScheduleType === "repeating"}
-                            onChange={() => onEditScheduleTypeChange("repeating")}
-                          />
-                          <label htmlFor={`schedule-type-repeating-${job.id}`}>Repeating daily</label>
-                        </div>
-                      </fieldset>
+                      <div className="schedule-edit-grid">
+                        <fieldset className="schedule-edit-section">
+                          <legend>Order setup</legend>
+                          <p className="schedule-edit-note">Choose side and confirm position size.</p>
 
-                      <div className={editErrors.scheduleAt ? "field-shell has-error" : "field-shell"}>
-                        <div className="field-row-stacked">
-                          <label htmlFor={`schedule-at-${job.id}`}>
-                            {editScheduleType === "one-off" ? "Run once at" : "Run daily at"}
-                          </label>
-                          <input
-                            id={`schedule-at-${job.id}`}
-                            ref={refs.scheduleAt}
-                            aria-invalid={Boolean(editErrors.scheduleAt)}
-                            type={editScheduleType === "one-off" ? "datetime-local" : "time"}
-                            value={editScheduleType === "one-off" ? editRunAt : editRunTime}
-                            onChange={(event) =>
-                              editScheduleType === "one-off"
-                                ? onEditRunAtChange(event.target.value)
-                                : onEditRunTimeChange(event.target.value)
-                            }
-                          />
-                        </div>
-                        {editErrors.scheduleAt ? <p className="field-error">{editErrors.scheduleAt}</p> : null}
+                          <div className="schedule-radio-group" role="group" aria-label="Order direction">
+                            <label className="schedule-radio-option" htmlFor={`schedule-edit-buy-${job.id}`}>
+                              <input
+                                id={`schedule-edit-buy-${job.id}`}
+                                type="radio"
+                                name={`schedule-direction-${job.id}`}
+                                checked={editDirection === "BUY"}
+                                onChange={() => onEditDirectionChange("BUY")}
+                              />
+                              <span>Buy</span>
+                            </label>
+                            <label className="schedule-radio-option" htmlFor={`schedule-edit-sell-${job.id}`}>
+                              <input
+                                id={`schedule-edit-sell-${job.id}`}
+                                type="radio"
+                                name={`schedule-direction-${job.id}`}
+                                checked={editDirection === "SELL"}
+                                onChange={() => onEditDirectionChange("SELL")}
+                              />
+                              <span>Sell</span>
+                            </label>
+                          </div>
+
+                          <div className={editErrors.size ? "field-shell has-error" : "field-shell"}>
+                            <div className="field-row-stacked">
+                              <label htmlFor={`schedule-size-${job.id}`}>Size</label>
+                              <input
+                                id={`schedule-size-${job.id}`}
+                                ref={refs.size}
+                                aria-invalid={Boolean(editErrors.size)}
+                                inputMode="decimal"
+                                min="0.01"
+                                step="0.01"
+                                type="number"
+                                value={editSize}
+                                onChange={(event) => onEditSizeChange(event.target.value)}
+                              />
+                            </div>
+                            {editErrors.size ? <p className="field-error">{editErrors.size}</p> : null}
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="schedule-edit-section">
+                          <legend>Timing</legend>
+                          <p className="schedule-edit-note">Switch between a one-time run or a daily recurring time.</p>
+
+                          <div className="schedule-radio-group" role="group" aria-label="Schedule type">
+                            <label className="schedule-radio-option" htmlFor={`schedule-type-one-off-${job.id}`}>
+                              <input
+                                id={`schedule-type-one-off-${job.id}`}
+                                type="radio"
+                                name={`schedule-type-${job.id}`}
+                                checked={editScheduleType === "one-off"}
+                                onChange={() => onEditScheduleTypeChange("one-off")}
+                              />
+                              <span>One-off</span>
+                            </label>
+                            <label className="schedule-radio-option" htmlFor={`schedule-type-repeating-${job.id}`}>
+                              <input
+                                id={`schedule-type-repeating-${job.id}`}
+                                type="radio"
+                                name={`schedule-type-${job.id}`}
+                                checked={editScheduleType === "repeating"}
+                                onChange={() => onEditScheduleTypeChange("repeating")}
+                              />
+                              <span>Repeating daily</span>
+                            </label>
+                          </div>
+
+                          <div className={editErrors.scheduleAt ? "field-shell has-error" : "field-shell"}>
+                            <div className="field-row-stacked">
+                              <label htmlFor={`schedule-at-${job.id}`}>
+                                {editScheduleType === "one-off" ? "Run once at" : "Run daily at"}
+                              </label>
+                              <input
+                                id={`schedule-at-${job.id}`}
+                                ref={refs.scheduleAt}
+                                aria-invalid={Boolean(editErrors.scheduleAt)}
+                                type={editScheduleType === "one-off" ? "datetime-local" : "time"}
+                                value={editScheduleType === "one-off" ? editRunAt : editRunTime}
+                                onChange={(event) =>
+                                  editScheduleType === "one-off"
+                                    ? onEditRunAtChange(event.target.value)
+                                    : onEditRunTimeChange(event.target.value)
+                                }
+                              />
+                            </div>
+                            {editErrors.scheduleAt ? <p className="field-error">{editErrors.scheduleAt}</p> : null}
+                          </div>
+                        </fieldset>
                       </div>
 
                       <ProtectionStrategyFields

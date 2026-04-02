@@ -533,12 +533,115 @@ a {
   border: 1px solid #b3b3b3;
 }
 
+.schedule-card {
+  display: grid;
+  gap: 8px;
+}
+
+.schedule-card-header {
+  display: grid;
+  gap: 2px;
+}
+
 .schedule-edit-form {
   display: grid;
   gap: 8px;
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #d0d0d0;
+}
+
+.schedule-edit-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 2px;
+}
+
+.schedule-edit-header p,
+.schedule-edit-note {
+  margin: 2px 0 0;
+  color: var(--muted-text);
+}
+
+.schedule-edit-meta {
+  color: var(--muted-text);
+  padding-top: 2px;
+}
+
+.schedule-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.schedule-edit-section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.schedule-edit-section legend {
+  padding: 0 4px;
+  font-family: inherit;
+}
+
+.schedule-radio-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.schedule-radio-option span {
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.schedule-edit-section .field-shell {
+  min-width: 0;
+}
+
+.schedule-edit-form .field-row-stacked label {
+  display: grid;
+  gap: 4px;
+  font-family: inherit;
+}
+
+.schedule-edit-header strong,
+.schedule-edit-header p,
+.schedule-edit-meta,
+.schedule-edit-note,
+.schedule-radio-option,
+.schedule-edit-form input,
+.schedule-edit-form select,
+.schedule-edit-form button {
+  font-family: inherit;
+}
+
+.schedule-edit-form input[type="number"],
+.schedule-edit-form input[type="time"],
+.schedule-edit-form input[type="datetime-local"] {
+  width: 100%;
+}
+
+.schedule-edit-form .protection-strategy {
+  margin: 0;
+}
+
+.schedule-edit-form .button-row {
+  padding-top: 8px;
+  border-top: 1px solid #b3b3b3;
 }
 
 .status-stack {
@@ -641,6 +744,10 @@ a {
   .trade-summary,
   .quote-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-edit-grid {
+    grid-template-columns: 1fr;
   }
 }
 
