@@ -286,6 +286,7 @@ describe("ScheduledOrderScheduler", () => {
     expect(updated.size).toBe(2);
     expect(updated.runAt).toBe("2026-03-23T11:45:00.000Z");
     expect(updated.protection).toBeNull();
+    expect(updated.reason).toBeUndefined();
   });
 
   it("recomputes repeating runAt when editing a repeating job", () => {

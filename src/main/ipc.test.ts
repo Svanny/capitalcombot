@@ -163,7 +163,7 @@ function createMockScheduler(): SchedulerLike {
         runAt: input.type === "one-off" ? input.runAt : "2026-03-23T14:30:00.000Z",
         runTime: input.type === "repeating" ? input.runTime : undefined,
         protection: input.protection ?? null,
-        reason: "Scheduled order updated manually.",
+        reason: undefined,
       };
       const index = schedules.findIndex((job) => job.id === jobId);
       schedules.splice(index, 1, nextJob);

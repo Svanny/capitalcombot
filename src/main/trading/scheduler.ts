@@ -127,7 +127,7 @@ export class ScheduledOrderScheduler {
       runAt: scheduledAt.toISOString(),
       runTime: input.type === "repeating" ? input.runTime : undefined,
       protection: input.protection ?? null,
-      reason: "Scheduled order updated manually.",
+      reason: undefined,
     };
 
     this.replaceJob(nextJob);
