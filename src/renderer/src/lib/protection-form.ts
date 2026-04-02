@@ -109,6 +109,35 @@ export function createProtectionFormFromPosition(position: OpenPosition): Protec
   };
 }
 
+export function createProtectionFormFromStrategy(
+  strategy: ProtectionStrategy | null | undefined,
+): ProtectionFormState {
+  if (!strategy) {
+    return { ...EMPTY_PROTECTION_FORM };
+  }
+
+  return {
+    stopLossMode: strategy.stopLoss.mode,
+    stopLossLevel: strategy.stopLoss.level !== undefined ? String(strategy.stopLoss.level) : "",
+    stopLossDistance:
+      strategy.stopLoss.distance !== undefined ? String(strategy.stopLoss.distance) : "",
+    stopLossAdxMultiplier:
+      strategy.stopLoss.adxMultiplier !== undefined ? String(strategy.stopLoss.adxMultiplier) : "",
+    takeProfitMode: strategy.takeProfit.mode,
+    takeProfitLevel: strategy.takeProfit.level !== undefined ? String(strategy.takeProfit.level) : "",
+    takeProfitDistance:
+      strategy.takeProfit.distance !== undefined ? String(strategy.takeProfit.distance) : "",
+    takeProfitRiskRewardRatio:
+      strategy.takeProfit.riskRewardRatio !== undefined
+        ? String(strategy.takeProfit.riskRewardRatio)
+        : "",
+    takeProfitAdxMultiplier:
+      strategy.takeProfit.adxMultiplier !== undefined
+        ? String(strategy.takeProfit.adxMultiplier)
+        : "",
+  };
+}
+
 export function hasProtectionStrategy(strategy: ProtectionStrategy | null | undefined): boolean {
   return Boolean(
     strategy && (strategy.stopLoss.mode !== "none" || strategy.takeProfit.mode !== "none"),

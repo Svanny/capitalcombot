@@ -7,6 +7,7 @@ import type {
   ProtectionStrategy,
   QuoteSnapshot,
   ResolvedProtection,
+  ScheduledOrderJob,
   ScheduledOrderType,
   TradeDirection,
 } from "@shared/types";
@@ -18,6 +19,7 @@ import {
   validateOrderForm,
 } from "./lib/validation";
 import {
+  createProtectionFormFromStrategy,
   createProtectionFormFromPosition,
   EMPTY_PROTECTION_FORM,
   hasProtectionStrategy,
@@ -79,6 +81,22 @@ export default function App() {
     null,
   );
   const [positionProtectionPreviewError, setPositionProtectionPreviewError] = useState<string | null>(null);
+  const [editingScheduledOrderId, setEditingScheduledOrderId] = useState<string | null>(null);
+  const [scheduledOrderDirection, setScheduledOrderDirection] = useState<TradeDirection>("BUY");
+  const [scheduledOrderSize, setScheduledOrderSize] = useState("1");
+  const [scheduledOrderType, setScheduledOrderType] = useState<ScheduledOrderType>("one-off");
+  const [scheduledOrderRunAt, setScheduledOrderRunAt] = useState("");
+  const [scheduledOrderRunTime, setScheduledOrderRunTime] = useState("");
+  const [scheduledOrderProtectionForm, setScheduledOrderProtectionForm] =
+    useState<ProtectionFormState>(EMPTY_PROTECTION_FORM);
+  const [scheduledOrderErrors, setScheduledOrderErrors] =
+    useState<Partial<Record<OrderFieldName, string>>>({});
+  const [scheduledOrderProtectionErrors, setScheduledOrderProtectionErrors] =
+    useState<Partial<Record<ProtectionFieldName, string>>>({});
+  const [scheduledOrderProtectionPreview, setScheduledOrderProtectionPreview] =
+    useState<ResolvedProtection | null>(null);
+  const [scheduledOrderProtectionPreviewError, setScheduledOrderProtectionPreviewError] =
+    useState<string | null>(null);
   const [authForm, setAuthForm] = useState<CapitalCredentials>({
     identifier: "",
     password: "",
@@ -100,6 +118,8 @@ export default function App() {
     positionProtectionPreview: false,
     positionProtectionSubmit: false,
     scheduleCancel: false,
+    scheduleUpdate: false,
+    scheduleProtectionPreview: false,
   });
 
   const authRefs = {
@@ -113,6 +133,19 @@ export default function App() {
     scheduleAt: useRef<HTMLInputElement>(null),
   };
   const protectionRefs = {
+    stopLossLevel: useRef<HTMLInputElement>(null),
+    stopLossDistance: useRef<HTMLInputElement>(null),
+    stopLossAdxMultiplier: useRef<HTMLInputElement>(null),
+    takeProfitLevel: useRef<HTMLInputElement>(null),
+    takeProfitDistance: useRef<HTMLInputElement>(null),
+    takeProfitRiskRewardRatio: useRef<HTMLInputElement>(null),
+    takeProfitAdxMultiplier: useRef<HTMLInputElement>(null),
+  };
+  const scheduleOrderRefs = {
+    size: useRef<HTMLInputElement>(null),
+    scheduleAt: useRef<HTMLInputElement>(null),
+  };
+  const scheduleProtectionRefs = {
     stopLossLevel: useRef<HTMLInputElement>(null),
     stopLossDistance: useRef<HTMLInputElement>(null),
     stopLossAdxMultiplier: useRef<HTMLInputElement>(null),
@@ -261,6 +294,88 @@ export default function App() {
     };
   }, [bootstrap.connected, editingProtectionPosition, positionProtectionForm]);
 
+  useEffect(() => {
+    if (!editingScheduledOrderId) {
+      return;
+    }
+
+    const currentJob = bootstrap.schedules.find((job) => job.id === editingScheduledOrderId);
+
+    if (!currentJob || currentJob.status !== "scheduled") {
+      clearScheduledOrderEditor();
+    }
+  }, [bootstrap.schedules, editingScheduledOrderId]);
+
+  useEffect(() => {
+    const currentJob = editingScheduledOrderId
+      ? bootstrap.schedules.find((job) => job.id === editingScheduledOrderId)
+      : null;
+
+    if (!bootstrap.connected || !currentJob) {
+      setScheduledOrderProtectionPreview(null);
+      setScheduledOrderProtectionPreviewError(null);
+      return;
+    }
+
+    const priceContext = currentJob.epic === bootstrap.selectedMarket?.epic
+      ? quote ?? bootstrap.selectedMarket
+      : null;
+    const validation = validateProtectionForm(
+      scheduledOrderProtectionForm,
+      scheduledOrderDirection,
+      getReferencePriceForDirection(priceContext, scheduledOrderDirection),
+    );
+
+    if (!validation.strategy || !hasProtectionStrategy(validation.strategy)) {
+      setScheduledOrderProtectionPreview(null);
+      setScheduledOrderProtectionPreviewError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingState((current) => ({ ...current, scheduleProtectionPreview: true }));
+
+    void window.capitalApi.orders
+      .previewProtection({
+        epic: currentJob.epic,
+        direction: scheduledOrderDirection,
+        protection: validation.strategy,
+      })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+
+        setScheduledOrderProtectionPreview(response.preview);
+        setScheduledOrderProtectionPreviewError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setScheduledOrderProtectionPreview(null);
+        setScheduledOrderProtectionPreviewError(getErrorMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingState((current) => ({ ...current, scheduleProtectionPreview: false }));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bootstrap.connected,
+    bootstrap.schedules,
+    bootstrap.selectedMarket,
+    editingScheduledOrderId,
+    quote,
+    scheduledOrderDirection,
+    scheduledOrderProtectionForm,
+  ]);
+
   const sortedExecutionLog = useMemo(
     () =>
       bootstrap.executionLog.slice().sort((left, right) => {
@@ -275,6 +390,10 @@ export default function App() {
         return new Date(right.runAt).getTime() - new Date(left.runAt).getTime();
       }),
     [bootstrap.schedules],
+  );
+  const editingScheduledOrder = useMemo(
+    () => bootstrap.schedules.find((job) => job.id === editingScheduledOrderId) ?? null,
+    [bootstrap.schedules, editingScheduledOrderId],
   );
 
   const sortedPositions = useMemo(
@@ -358,10 +477,6 @@ export default function App() {
       setAuthErrors({});
       applyBootstrap(response.state);
       selectTab(response.state.selectedMarket ? "trade" : "setup");
-      setAuthForm((current) => ({
-        ...current,
-        password: "",
-      }));
       await refreshConnectedData(response.state);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -597,11 +712,101 @@ export default function App() {
     try {
       const response = await window.capitalApi.schedules.cancel({ jobId });
       setStatusMessage(response.result.message);
+      if (editingScheduledOrderId === jobId) {
+        clearScheduledOrderEditor();
+      }
       await refreshConnectedData();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
       setLoadingState((current) => ({ ...current, scheduleCancel: false }));
+    }
+  }
+
+  function handleScheduleEdit(job: ScheduledOrderJob): void {
+    setEditingScheduledOrderId(job.id);
+    setScheduledOrderDirection(job.direction);
+    setScheduledOrderSize(String(job.size));
+    setScheduledOrderType(job.scheduleType);
+    setScheduledOrderRunAt(job.scheduleType === "one-off" ? toLocalDateTimeInput(job.runAt) : "");
+    setScheduledOrderRunTime(job.scheduleType === "repeating" ? job.runTime ?? "" : "");
+    setScheduledOrderProtectionForm(createProtectionFormFromStrategy(job.protection));
+    setScheduledOrderErrors({});
+    setScheduledOrderProtectionErrors({});
+    setScheduledOrderProtectionPreview(null);
+    setScheduledOrderProtectionPreviewError(null);
+  }
+
+  function clearScheduledOrderEditor(): void {
+    setEditingScheduledOrderId(null);
+    setScheduledOrderErrors({});
+    setScheduledOrderProtectionErrors({});
+    setScheduledOrderProtectionPreview(null);
+    setScheduledOrderProtectionPreviewError(null);
+  }
+
+  async function handleScheduleUpdate(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!editingScheduledOrder) {
+      return;
+    }
+
+    const validation = validateOrderForm({
+      size: scheduledOrderSize,
+      runAt: scheduledOrderRunAt,
+      runTime: scheduledOrderRunTime,
+      scheduleType: scheduledOrderType,
+      wantsScheduledClose: true,
+      selectedMarketEpic: editingScheduledOrder.epic,
+    });
+    setScheduledOrderErrors(validation.fieldErrors);
+
+    const priceContext = editingScheduledOrder.epic === bootstrap.selectedMarket?.epic
+      ? quote ?? bootstrap.selectedMarket
+      : null;
+    const protectionValidation = validateProtectionForm(
+      scheduledOrderProtectionForm,
+      scheduledOrderDirection,
+      getReferencePriceForDirection(priceContext, scheduledOrderDirection),
+    );
+    setScheduledOrderProtectionErrors(protectionValidation.fieldErrors);
+
+    if (validation.firstInvalidField || protectionValidation.firstInvalidField || !validation.schedule) {
+      if (validation.firstInvalidField) {
+        focusScheduledOrderField(validation.firstInvalidField);
+      } else if (protectionValidation.firstInvalidField) {
+        scheduleProtectionRefs[protectionValidation.firstInvalidField].current?.focus();
+      }
+      setErrorMessage(
+        Object.values(validation.fieldErrors)[0] ??
+          Object.values(protectionValidation.fieldErrors)[0] ??
+          "Fix the scheduled order fields before saving.",
+      );
+      return;
+    }
+
+    setLoadingState((current) => ({ ...current, scheduleUpdate: true }));
+    setErrorMessage(null);
+
+    try {
+      const response = await window.capitalApi.schedules.update({
+        jobId: editingScheduledOrder.id,
+        direction: scheduledOrderDirection,
+        size: validation.normalizedSize!,
+        schedule: validation.schedule,
+        protection:
+          protectionValidation.strategy && hasProtectionStrategy(protectionValidation.strategy)
+            ? protectionValidation.strategy
+            : null,
+      });
+      setStatusMessage(response.result.message);
+      clearScheduledOrderEditor();
+      await refreshConnectedData();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoadingState((current) => ({ ...current, scheduleUpdate: false }));
     }
   }
 
@@ -666,6 +871,16 @@ export default function App() {
   function focusOrderField(field: OrderFieldName): void {
     window.setTimeout(() => {
       orderRefs[field].current?.focus();
+    }, 0);
+  }
+
+  function focusScheduledOrderField(field: OrderFieldName): void {
+    if (field === "selectedMarketEpic") {
+      return;
+    }
+
+    window.setTimeout(() => {
+      scheduleOrderRefs[field].current?.focus();
     }, 0);
   }
 
@@ -862,7 +1077,49 @@ export default function App() {
                   />
                   <SchedulePanel
                     loadingCancel={loadingState.scheduleCancel}
+                    editingJobId={editingScheduledOrderId}
+                    editDirection={scheduledOrderDirection}
+                    editErrors={scheduledOrderErrors}
+                    editProtectionErrors={scheduledOrderProtectionErrors}
+                    editProtectionPreview={scheduledOrderProtectionPreview}
+                    editProtectionPreviewError={scheduledOrderProtectionPreviewError}
+                    editProtectionRefs={scheduleProtectionRefs}
+                    editProtectionValues={scheduledOrderProtectionForm}
+                    editRunAt={scheduledOrderRunAt}
+                    editRunTime={scheduledOrderRunTime}
+                    editScheduleType={scheduledOrderType}
+                    editSize={scheduledOrderSize}
+                    loadingEditPreview={loadingState.scheduleProtectionPreview}
+                    loadingUpdate={loadingState.scheduleUpdate}
                     onCancel={(job) => handleScheduleCancel(job.id)}
+                    onEdit={handleScheduleEdit}
+                    onEditCancel={clearScheduledOrderEditor}
+                    onEditDirectionChange={setScheduledOrderDirection}
+                    onEditProtectionChange={(field, value) => {
+                      setScheduledOrderProtectionForm((current) => ({
+                        ...current,
+                        [field]: value,
+                      }));
+                      setScheduledOrderProtectionErrors((current) => ({ ...current, [field]: undefined }));
+                    }}
+                    onEditRunAtChange={(value) => {
+                      setScheduledOrderRunAt(value);
+                      setScheduledOrderErrors((current) => ({ ...current, scheduleAt: undefined }));
+                    }}
+                    onEditRunTimeChange={(value) => {
+                      setScheduledOrderRunTime(value);
+                      setScheduledOrderErrors((current) => ({ ...current, scheduleAt: undefined }));
+                    }}
+                    onEditScheduleTypeChange={(value) => {
+                      setScheduledOrderType(value);
+                      setScheduledOrderErrors((current) => ({ ...current, scheduleAt: undefined }));
+                    }}
+                    onEditSizeChange={(value) => {
+                      setScheduledOrderSize(value);
+                      setScheduledOrderErrors((current) => ({ ...current, size: undefined }));
+                    }}
+                    onEditSubmit={handleScheduleUpdate}
+                    refs={scheduleOrderRefs}
                     schedules={sortedSchedules}
                   />
                 </div>
@@ -932,4 +1189,16 @@ function getReferencePriceForDirection(
   }
 
   return direction === "BUY" ? market.ask ?? market.bid : market.bid ?? market.ask;
+}
+
+function toLocalDateTimeInput(value: string): string {
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const offsetMinutes = parsed.getTimezoneOffset();
+  const local = new Date(parsed.getTime() - offsetMinutes * 60_000);
+  return local.toISOString().slice(0, 16);
 }

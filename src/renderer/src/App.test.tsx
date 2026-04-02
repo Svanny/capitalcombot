@@ -191,8 +191,23 @@ function buildApi(
           at: "2026-03-23T10:00:00.000Z",
         },
       })),
+      update: vi.fn(async () => ({
+        schedules: bootstrap.schedules,
+        result: {
+          action: "schedule" as const,
+          status: "success" as const,
+          message: "Updated scheduled order for Spot Gold.",
+          at: "2026-03-23T10:00:00.000Z",
+        },
+      })),
     },
   };
+}
+
+function toLocalDateTimeInput(value: string): string {
+  const parsed = new Date(value);
+  const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 describe("App", () => {
@@ -253,6 +268,63 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: /hide setup|edit setup|open setup/i })).not.toBeInTheDocument();
   });
 
+  it("keeps password and API key in the form after a successful connect", async () => {
+    const api = buildApi(disconnectedBootstrap);
+    const connectState: BootstrapState = {
+      ...connectedWithoutMarketBootstrap,
+      savedProfile: {
+        identifier: "trader@example.com",
+        environment: "demo",
+      },
+    };
+
+    api.auth.connect = vi.fn(async () => ({
+      state: connectState,
+      result: {
+        action: "auth" as const,
+        status: "success" as const,
+        message: "Connected to Capital.com demo environment.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+
+    window.capitalApi = api;
+
+    render(<App />);
+
+    const identifierInput = await screen.findByLabelText("Account identifier");
+    const passwordInput = screen.getByLabelText("Password");
+    const apiKeyInput = screen.getByLabelText("API key");
+
+    fireEvent.change(identifierInput, { target: { value: "trader@example.com" } });
+    fireEvent.change(passwordInput, { target: { value: "secret-pass" } });
+    fireEvent.change(apiKeyInput, { target: { value: "cap-api-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => {
+      expect(api.auth.connect).toHaveBeenCalledWith({
+        identifier: "trader@example.com",
+        password: "secret-pass",
+        apiKey: "cap-api-key",
+        environment: "demo",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Password")).toHaveValue("secret-pass");
+      expect(screen.getByLabelText("API key")).toHaveValue("cap-api-key");
+    });
+  });
+
+  it("rehydrates the password and API key when bootstrap returns a connected saved session", async () => {
+    window.capitalApi = buildApi(connectedBootstrap);
+
+    render(<App />);
+
+    expect(await screen.findByLabelText("Password")).toHaveValue("");
+    expect(screen.getByLabelText("API key")).toHaveValue("");
+  });
+
   it("renders inline validation and focuses the first invalid order field", async () => {
     window.capitalApi = buildApi(connectedWithoutMarketBootstrap);
 
@@ -306,7 +378,7 @@ describe("App", () => {
     expect(await screen.findByText("No execution history yet.")).toBeInTheDocument();
   });
 
-  it("shows cancel only for scheduled orders", async () => {
+  it("shows edit and cancel only for scheduled orders", async () => {
     window.capitalApi = buildApi(connectedBootstrap);
 
     render(<App />);
@@ -314,8 +386,71 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
 
     expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(screen.getAllByText("executed").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("prefills and saves scheduled order edits from the portfolio tab", async () => {
+    const api = buildApi(connectedBootstrap);
+    const updatedSchedules = [
+      {
+        ...connectedBootstrap.schedules[0],
+        direction: "SELL" as const,
+        size: 2,
+        scheduleType: "repeating" as const,
+        runAt: "2026-03-23T14:30:00.000Z",
+        runTime: "14:30",
+      },
+      connectedBootstrap.schedules[1],
+    ];
+    api.schedules.list = vi
+      .fn()
+      .mockResolvedValueOnce(connectedBootstrap.schedules)
+      .mockResolvedValue(updatedSchedules);
+    api.schedules.update = vi.fn(async () => ({
+      schedules: updatedSchedules,
+      result: {
+        action: "schedule" as const,
+        status: "success" as const,
+        message: "Updated scheduled order for Spot Gold.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+    window.capitalApi = api;
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    expect(await screen.findByLabelText("Size")).toHaveValue(1);
+    expect(screen.getByDisplayValue(toLocalDateTimeInput("2026-03-23T11:00:00.000Z"))).toBeInTheDocument();
+    expect(screen.getByLabelText("Buy")).toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("Sell"));
+    fireEvent.change(screen.getByLabelText("Size"), { target: { value: "2" } });
+    fireEvent.click(screen.getByLabelText("Repeating daily"));
+    fireEvent.change(screen.getByLabelText("Run daily at"), { target: { value: "14:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(api.schedules.update).toHaveBeenCalledWith({
+        jobId: "job-1",
+        direction: "SELL",
+        size: 2,
+        schedule: {
+          type: "repeating",
+          runTime: "14:30",
+        },
+        protection: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+    });
   });
 
   it("renders activity, schedules, and positions in descending chronological order", async () => {
