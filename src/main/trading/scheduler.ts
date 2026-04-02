@@ -5,11 +5,18 @@ import type {
   ScheduledOrderJob,
   ScheduledOrderRequest,
 } from "../../shared/types";
+import { createAppError } from "./capital/client";
 import { buildExecutionResult, type AppStateStore } from "../state/app-store";
 
 export type ScheduledOrderInput = ScheduledOrderRequest & {
   epic: string;
   instrumentName: string;
+  direction: "BUY" | "SELL";
+  size: number;
+  protection?: ProtectionStrategy | null;
+};
+
+export type ScheduledOrderUpdateInput = ScheduledOrderRequest & {
   direction: "BUY" | "SELL";
   size: number;
   protection?: ProtectionStrategy | null;
@@ -94,6 +101,38 @@ export class ScheduledOrderScheduler {
 
     this.store.setSchedules(nextSchedules);
     return nextSchedules;
+  }
+
+  update(jobId: string, input: ScheduledOrderUpdateInput): ScheduledOrderJob {
+    const current = this.list().find((job) => job.id === jobId);
+
+    if (!current) {
+      throw createAppError("MISSING_SCHEDULE", "No scheduled order was found to update.", true);
+    }
+
+    if (current.status !== "scheduled") {
+      throw createAppError(
+        "INVALID_SCHEDULE_STATE",
+        "Only pending scheduled orders can be edited.",
+        true,
+      );
+    }
+
+    const scheduledAt = resolveInitialRunAt(input, this.clock.now());
+    const nextJob: ScheduledOrderJob = {
+      ...current,
+      direction: input.direction,
+      size: input.size,
+      scheduleType: input.type,
+      runAt: scheduledAt.toISOString(),
+      runTime: input.type === "repeating" ? input.runTime : undefined,
+      protection: input.protection ?? null,
+      reason: "Scheduled order updated manually.",
+    };
+
+    this.replaceJob(nextJob);
+    this.arm(nextJob);
+    return nextJob;
   }
 
   private restoreJob(job: ScheduledOrderJob): ScheduledOrderJob {
@@ -270,7 +309,7 @@ function buildScheduleId(input: ScheduledOrderInput, runAtMs: number): string {
     : `schedule_${input.epic}_${input.direction}_${input.size}_${runAtMs}`;
 }
 
-function resolveInitialRunAt(input: ScheduledOrderInput, nowMs: number): Date {
+function resolveInitialRunAt(input: ScheduledOrderRequest, nowMs: number): Date {
   if (input.type === "one-off") {
     const runAt = new Date(input.runAt);
 

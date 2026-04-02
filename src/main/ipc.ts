@@ -16,14 +16,16 @@ import type {
   QuoteSnapshot,
   ReversePositionResponse,
   ScheduledOrderJob,
+  ScheduledOrderUpdateInput,
   UpdatePositionProtectionInput,
   UpdatePositionProtectionResponse,
+  UpdateScheduledOrderResponse,
 } from "../shared/types";
 import { createAppError, normalizeError } from "./trading/capital/client";
 import type { CredentialStore } from "./security/credential-store";
 import { buildExecutionResult, type AppStateStore } from "./state/app-store";
 import { resolveProtection } from "./trading/protection";
-import type { ScheduledOrderInput } from "./trading/scheduler";
+import type { ScheduledOrderInput, ScheduledOrderUpdateInput as SchedulerScheduledOrderUpdateInput } from "./trading/scheduler";
 
 export interface TradingClientLike {
   connect(credentials: CapitalCredentials): Promise<void>;
@@ -50,6 +52,7 @@ export interface SchedulerLike {
   list(): ScheduledOrderJob[];
   schedule(input: ScheduledOrderInput): ScheduledOrderJob;
   cancel(jobId: string, reason?: string): ScheduledOrderJob[];
+  update(jobId: string, input: SchedulerScheduledOrderUpdateInput): ScheduledOrderJob;
 }
 
 export interface IpcDependencies {
@@ -90,6 +93,7 @@ export async function registerIpcHandlers(dependencies: IpcDependencies): Promis
   );
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_LIST, handlers.listSchedules);
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_CANCEL, (_event, input: unknown) => handlers.cancelSchedule(input));
+  ipcMain.handle(IPC_CHANNELS.SCHEDULES_UPDATE, (_event, input: unknown) => handlers.updateSchedule(input));
 }
 
 export function createIpcHandlers({ client, store, credentials, scheduler }: IpcDependencies) {
@@ -380,6 +384,30 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
         throw serializeError(normalizeError(error));
       }
     },
+
+    updateSchedule: async (unsafeInput: unknown): Promise<UpdateScheduledOrderResponse> => {
+      try {
+        const input = validateScheduledOrderUpdateInput(unsafeInput);
+        const updated = scheduler.update(input.jobId, {
+          direction: input.direction,
+          size: input.size,
+          protection: input.protection ?? null,
+          ...input.schedule,
+        });
+        const result = buildExecutionResult(
+          "schedule",
+          "success",
+          `Updated scheduled order for ${updated.instrumentName}.`,
+        );
+        store.appendExecution(result);
+        return {
+          schedules: scheduler.list(),
+          result,
+        };
+      } catch (error) {
+        throw serializeError(normalizeError(error));
+      }
+    },
   };
 }
 
@@ -459,6 +487,18 @@ function validateProtectionPreviewInput(value: unknown): ProtectionPreviewInput 
   };
 }
 
+function validateScheduledOrderUpdateInput(value: unknown): ScheduledOrderUpdateInput {
+  const object = requireObject(value, "Enter a valid scheduled order update.");
+
+  return {
+    jobId: validateIdentifierString(object.jobId, "Choose a valid scheduled order to update."),
+    direction: validateTradeDirection(object.direction),
+    size: validatePositiveNumber(object.size, "Enter a trade size greater than 0."),
+    schedule: validateRequiredScheduleRequest(object.schedule),
+    protection: validateProtectionStrategy(object.protection, true),
+  };
+}
+
 function validateUpdatePositionProtectionInput(value: unknown): UpdatePositionProtectionInput {
   const object = requireObject(value, "Enter a valid protection update.");
   const protection = validateProtectionStrategy(object.protection, false);
@@ -484,6 +524,10 @@ function validateScheduleRequest(value: unknown): OpenMarketOrderInput["schedule
     return null;
   }
 
+  return validateRequiredScheduleRequest(value);
+}
+
+function validateRequiredScheduleRequest(value: unknown): NonNullable<OpenMarketOrderInput["schedule"]> {
   const object = requireObject(value, "Enter a valid schedule.");
 
   if (object.type === "one-off") {

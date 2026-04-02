@@ -148,6 +148,27 @@ function createMockScheduler(): SchedulerLike {
           : job,
       ),
     ),
+    update: vi.fn((jobId, input) => {
+      const current = schedules.find((job) => job.id === jobId);
+
+      if (!current) {
+        throw new Error("missing schedule");
+      }
+
+      const nextJob: ScheduledOrderJob = {
+        ...current,
+        direction: input.direction,
+        size: input.size,
+        scheduleType: input.type,
+        runAt: input.type === "one-off" ? input.runAt : "2026-03-23T14:30:00.000Z",
+        runTime: input.type === "repeating" ? input.runTime : undefined,
+        protection: input.protection ?? null,
+        reason: "Scheduled order updated manually.",
+      };
+      const index = schedules.findIndex((job) => job.id === jobId);
+      schedules.splice(index, 1, nextJob);
+      return nextJob;
+    }),
   };
 }
 
@@ -326,6 +347,56 @@ describe("createIpcHandlers", () => {
     expect(scheduler.cancel).toHaveBeenCalledWith("schedule_XAUUSD");
   });
 
+  it("updates a scheduled order by job id", async () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = createMockScheduler();
+    await scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T11:00:00.000Z",
+    });
+    const handlers = createIpcHandlers({
+      client: createMockClient(),
+      store,
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+    });
+
+    const response = await handlers.updateSchedule({
+      jobId: "schedule_XAUUSD",
+      direction: "SELL",
+      size: 2,
+      schedule: {
+        type: "repeating",
+        runTime: "14:30",
+      },
+      protection: {
+        stopLoss: { mode: "distance", distance: 10 },
+        takeProfit: { mode: "risk_reward", riskRewardRatio: 2 },
+      },
+    });
+
+    expect(response.schedules[0]).toMatchObject({
+      id: "schedule_XAUUSD",
+      direction: "SELL",
+      size: 2,
+      scheduleType: "repeating",
+      runTime: "14:30",
+    });
+    expect(scheduler.update).toHaveBeenCalledWith(
+      "schedule_XAUUSD",
+      expect.objectContaining({
+        direction: "SELL",
+        size: 2,
+        type: "repeating",
+        runTime: "14:30",
+      }),
+    );
+  });
+
   it("previews protection in the main process", async () => {
     const handlers = createIpcHandlers({
       client: createMockClient(),
@@ -434,14 +505,17 @@ describe("createIpcHandlers", () => {
     const close = registrations.get(IPC_CHANNELS.POSITIONS_CLOSE);
     const reverse = registrations.get(IPC_CHANNELS.POSITIONS_REVERSE);
     const cancel = registrations.get(IPC_CHANNELS.SCHEDULES_CANCEL);
+    const update = registrations.get(IPC_CHANNELS.SCHEDULES_UPDATE);
 
     expect(close).toBeTypeOf("function");
     expect(reverse).toBeTypeOf("function");
     expect(cancel).toBeTypeOf("function");
+    expect(update).toBeTypeOf("function");
 
     await expect(close?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     await expect(reverse?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     await expect(cancel?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    await expect(update?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     expect(client.closePosition).not.toHaveBeenCalled();
     expect(client.reversePosition).not.toHaveBeenCalled();
   });

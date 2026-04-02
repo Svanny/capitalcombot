@@ -250,4 +250,123 @@ describe("ScheduledOrderScheduler", () => {
       takeProfit: { mode: "risk_reward", riskRewardRatio: 2 },
     });
   });
+
+  it("updates a one-off job in place and preserves identity", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+      protection: {
+        stopLoss: { mode: "distance", distance: 10 },
+        takeProfit: { mode: "risk_reward", riskRewardRatio: 2 },
+      },
+    });
+
+    const updated = scheduler.update(job.id, {
+      direction: "SELL",
+      size: 2,
+      type: "one-off",
+      runAt: "2026-03-23T11:45:00.000Z",
+      protection: null,
+    });
+
+    expect(updated.id).toBe(job.id);
+    expect(updated.createdAt).toBe(job.createdAt);
+    expect(updated.direction).toBe("SELL");
+    expect(updated.size).toBe(2);
+    expect(updated.runAt).toBe("2026-03-23T11:45:00.000Z");
+    expect(updated.protection).toBeNull();
+  });
+
+  it("recomputes repeating runAt when editing a repeating job", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "10:30",
+    });
+
+    const updated = scheduler.update(job.id, {
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "14:15",
+      protection: null,
+    });
+
+    expect(updated.scheduleType).toBe("repeating");
+    expect(updated.runTime).toBe("14:15");
+    const nextRun = new Date(updated.runAt);
+    expect(nextRun.getHours()).toBe(14);
+    expect(nextRun.getMinutes()).toBe(15);
+  });
+
+  it("rejects updates for invalid or non-pending jobs", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+
+    expect(() =>
+      scheduler.update(job.id, {
+        direction: "BUY",
+        size: 1,
+        type: "one-off",
+        runAt: "2026-03-23T09:00:00.000Z",
+        protection: null,
+      }),
+    ).toThrow(/future/i);
+
+    scheduler.cancel(job.id);
+
+    expect(() =>
+      scheduler.update(job.id, {
+        direction: "BUY",
+        size: 1,
+        type: "repeating",
+        runTime: "10:30",
+        protection: null,
+      }),
+    ).toThrow(/pending scheduled orders/i);
+
+    expect(() =>
+      scheduler.update("missing", {
+        direction: "BUY",
+        size: 1,
+        type: "repeating",
+        runTime: "10:30",
+        protection: null,
+      }),
+    ).toThrow(/No scheduled order/i);
+  });
 });

@@ -15,4 +15,5 @@ export const IPC_CHANNELS = {
   ORDERS_PREVIEW_PROTECTION: "orders.previewProtection",
   SCHEDULES_LIST: "schedules.list",
   SCHEDULES_CANCEL: "schedules.cancel",
+  SCHEDULES_UPDATE: "schedules.update",
 } as const;

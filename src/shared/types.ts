@@ -164,6 +164,14 @@ export interface ScheduledOrderCancelInput {
   jobId: string;
 }
 
+export interface ScheduledOrderUpdateInput {
+  jobId: string;
+  direction: TradeDirection;
+  size: number;
+  schedule: ScheduledOrderRequest;
+  protection?: ProtectionStrategy | null;
+}
+
 export interface ProtectionPreviewInput {
   epic: string;
   direction: TradeDirection;
@@ -200,6 +208,11 @@ export interface AuthResponse {
 }
 
 export interface CancelScheduledOrderResponse {
+  schedules: ScheduledOrderJob[];
+  result: ExecutionResult;
+}
+
+export interface UpdateScheduledOrderResponse {
   schedules: ScheduledOrderJob[];
   result: ExecutionResult;
 }
@@ -243,5 +256,6 @@ export interface CapitalDesktopApi {
   schedules: {
     list: () => Promise<ScheduledOrderJob[]>;
     cancel: (input: ScheduledOrderCancelInput) => Promise<CancelScheduledOrderResponse>;
+    update: (input: ScheduledOrderUpdateInput) => Promise<UpdateScheduledOrderResponse>;
   };
 }
