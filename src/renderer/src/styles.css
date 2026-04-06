@@ -595,17 +595,8 @@ a {
 }
 
 .schedule-radio-option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 22px;
-  padding: 0;
-  cursor: pointer;
-}
-
-.schedule-radio-option span {
-  font-weight: 400;
-  line-height: 1.2;
+  display: inline-block;
+  min-height: 16px;
 }
 
 .schedule-edit-section .field-shell {
@@ -623,6 +614,7 @@ a {
 .schedule-edit-meta,
 .schedule-edit-note,
 .schedule-radio-option,
+.schedule-radio-option label,
 .schedule-edit-form input,
 .schedule-edit-form select,
 .schedule-edit-form button {

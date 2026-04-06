@@ -159,7 +159,7 @@ export function SchedulePanel({
                           <p className="schedule-edit-note">Choose side and confirm position size.</p>
 
                           <div className="schedule-radio-group" role="group" aria-label="Order direction">
-                            <label className="schedule-radio-option" htmlFor={`schedule-edit-buy-${job.id}`}>
+                            <div className="schedule-radio-option">
                               <input
                                 id={`schedule-edit-buy-${job.id}`}
                                 type="radio"
@@ -167,9 +167,9 @@ export function SchedulePanel({
                                 checked={editDirection === "BUY"}
                                 onChange={() => onEditDirectionChange("BUY")}
                               />
-                              <span>Buy</span>
-                            </label>
-                            <label className="schedule-radio-option" htmlFor={`schedule-edit-sell-${job.id}`}>
+                              <label htmlFor={`schedule-edit-buy-${job.id}`}>Buy</label>
+                            </div>
+                            <div className="schedule-radio-option">
                               <input
                                 id={`schedule-edit-sell-${job.id}`}
                                 type="radio"
@@ -177,8 +177,8 @@ export function SchedulePanel({
                                 checked={editDirection === "SELL"}
                                 onChange={() => onEditDirectionChange("SELL")}
                               />
-                              <span>Sell</span>
-                            </label>
+                              <label htmlFor={`schedule-edit-sell-${job.id}`}>Sell</label>
+                            </div>
                           </div>
 
                           <div className={editErrors.size ? "field-shell has-error" : "field-shell"}>
@@ -205,7 +205,7 @@ export function SchedulePanel({
                           <p className="schedule-edit-note">Switch between a one-time run or a daily recurring time.</p>
 
                           <div className="schedule-radio-group" role="group" aria-label="Schedule type">
-                            <label className="schedule-radio-option" htmlFor={`schedule-type-one-off-${job.id}`}>
+                            <div className="schedule-radio-option">
                               <input
                                 id={`schedule-type-one-off-${job.id}`}
                                 type="radio"
@@ -213,9 +213,9 @@ export function SchedulePanel({
                                 checked={editScheduleType === "one-off"}
                                 onChange={() => onEditScheduleTypeChange("one-off")}
                               />
-                              <span>One-off</span>
-                            </label>
-                            <label className="schedule-radio-option" htmlFor={`schedule-type-repeating-${job.id}`}>
+                              <label htmlFor={`schedule-type-one-off-${job.id}`}>One-off</label>
+                            </div>
+                            <div className="schedule-radio-option">
                               <input
                                 id={`schedule-type-repeating-${job.id}`}
                                 type="radio"
@@ -223,8 +223,8 @@ export function SchedulePanel({
                                 checked={editScheduleType === "repeating"}
                                 onChange={() => onEditScheduleTypeChange("repeating")}
                               />
-                              <span>Repeating daily</span>
-                            </label>
+                              <label htmlFor={`schedule-type-repeating-${job.id}`}>Repeating daily</label>
+                            </div>
                           </div>
 
                           <div className={editErrors.scheduleAt ? "field-shell has-error" : "field-shell"}>

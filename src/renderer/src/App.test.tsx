@@ -427,7 +427,9 @@ describe("App", () => {
 
     expect(await screen.findByLabelText("Size")).toHaveValue(1);
     expect(screen.getByDisplayValue(toLocalDateTimeInput("2026-03-23T11:00:00.000Z"))).toBeInTheDocument();
-    expect(screen.getByLabelText("Buy")).toBeChecked();
+    const buyRadio = screen.getByLabelText("Buy");
+    expect(buyRadio).toBeChecked();
+    expect(buyRadio.nextElementSibling).toHaveTextContent("Buy");
 
     fireEvent.click(screen.getByLabelText("Sell"));
     fireEvent.change(screen.getByLabelText("Size"), { target: { value: "2" } });
