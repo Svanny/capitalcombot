@@ -321,6 +321,141 @@ describe("ScheduledOrderScheduler", () => {
     expect(nextRun.getMinutes()).toBe(15);
   });
 
+  it("keeps matching schedules independently editable by assigning unique ids", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+
+    const first = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "10:30",
+    });
+    const second = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "10:30",
+    });
+
+    expect(first.id).not.toBe(second.id);
+
+    scheduler.update(first.id, {
+      direction: "SELL",
+      size: 2,
+      type: "repeating",
+      runTime: "14:15",
+      protection: null,
+    });
+
+    const updatedSchedules = store.getState().schedules;
+    const updatedFirst = updatedSchedules.find((job) => job.id === first.id);
+    const untouchedSecond = updatedSchedules.find((job) => job.id === second.id);
+    expect(updatedFirst?.id).toBe(first.id);
+    expect(updatedFirst?.direction).toBe("SELL");
+    expect(updatedFirst?.size).toBe(2);
+    expect(updatedFirst?.runTime).toBe("14:15");
+    expect(untouchedSecond?.id).toBe(second.id);
+    expect(untouchedSecond?.direction).toBe("BUY");
+    expect(untouchedSecond?.size).toBe(1);
+    expect(untouchedSecond?.runTime).toBe("10:30");
+  });
+
+  it("repairs duplicate persisted ids during restore", () => {
+    const store = new MemoryAppStateStore();
+    store.setSchedules([
+      {
+        id: "schedule_duplicate",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "repeating",
+        runAt: "2026-03-23T10:30:00.000Z",
+        runTime: "10:30",
+        status: "scheduled",
+        createdAt: "2026-03-23T10:00:00.000Z",
+      },
+      {
+        id: "schedule_duplicate",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "repeating",
+        runAt: "2026-03-23T11:30:00.000Z",
+        runTime: "11:30",
+        status: "scheduled",
+        createdAt: "2026-03-23T10:05:00.000Z",
+      },
+    ]);
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+
+    const restored = scheduler.restore();
+
+    expect(restored).toHaveLength(2);
+    expect(restored[0]?.id).not.toBe(restored[1]?.id);
+    expect(new Set(restored.map((job) => job.id)).size).toBe(2);
+  });
+
+  it("executes restored schedules after repairing duplicate ids", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: null,
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    store.setSchedules([
+      {
+        id: "schedule_duplicate",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "one-off",
+        runAt: "2026-03-23T10:30:00.000Z",
+        status: "scheduled",
+        createdAt: "2026-03-23T10:00:00.000Z",
+      },
+      {
+        id: "schedule_duplicate",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "SELL",
+        size: 1,
+        scheduleType: "one-off",
+        runAt: "2026-03-23T10:31:00.000Z",
+        status: "scheduled",
+        createdAt: "2026-03-23T10:05:00.000Z",
+      },
+    ]);
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+
+    const restored = scheduler.restore();
+
+    expect(new Set(restored.map((job) => job.id)).size).toBe(2);
+
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+    await clock.advanceTo("2026-03-23T10:31:00.000Z");
+
+    expect(placeSpy).toHaveBeenCalledTimes(2);
+    expect(placeSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ direction: "BUY" }));
+    expect(placeSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({ direction: "SELL" }));
+    expect(store.getState().schedules.every((job) => job.status === "executed")).toBe(true);
+  });
+
   it("rejects updates for invalid or non-pending jobs", () => {
     const store = new MemoryAppStateStore();
     const scheduler = new ScheduledOrderScheduler(

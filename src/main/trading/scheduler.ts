@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   OpenPosition,
   ProtectionStrategy,
@@ -49,9 +50,8 @@ export class ScheduledOrderScheduler {
   ) {}
 
   restore(): ScheduledOrderJob[] {
-    const restored = this.store
-      .getState()
-      .schedules.map((job) => this.restoreJob(job))
+    const restored = assignUniqueJobIds(this.store.getState().schedules)
+      .map((job) => this.restoreJob(job))
       .sort(sortJobs);
 
     this.store.setSchedules(restored);
@@ -66,7 +66,7 @@ export class ScheduledOrderScheduler {
     const scheduledAt = resolveInitialRunAt(input, this.clock.now());
 
     const job: ScheduledOrderJob = {
-      id: buildScheduleId(input, scheduledAt.getTime()),
+      id: buildScheduleId(),
       epic: input.epic,
       instrumentName: input.instrumentName,
       direction: input.direction,
@@ -303,10 +303,26 @@ function sortJobs(left: ScheduledOrderJob, right: ScheduledOrderJob): number {
   return new Date(left.runAt).getTime() - new Date(right.runAt).getTime();
 }
 
-function buildScheduleId(input: ScheduledOrderInput, runAtMs: number): string {
-  return input.type === "repeating"
-    ? `schedule_${input.epic}_${input.direction}_${input.size}_repeating_${input.runTime}`
-    : `schedule_${input.epic}_${input.direction}_${input.size}_${runAtMs}`;
+function buildScheduleId(): string {
+  return `schedule_${randomUUID()}`;
+}
+
+function assignUniqueJobIds(jobs: ScheduledOrderJob[]): ScheduledOrderJob[] {
+  const seenIds = new Set<string>();
+
+  return jobs.map((job) => {
+    if (job.id && !seenIds.has(job.id)) {
+      seenIds.add(job.id);
+      return job;
+    }
+
+    const nextJob = {
+      ...job,
+      id: buildScheduleId(),
+    };
+    seenIds.add(nextJob.id);
+    return nextJob;
+  });
 }
 
 function resolveInitialRunAt(input: ScheduledOrderRequest, nowMs: number): Date {
