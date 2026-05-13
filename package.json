@@ -57,8 +57,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@xmldom/xmldom": "0.9.10",
-      "brace-expansion": "2.0.3",
+      "@xmldom/xmldom": "0.8.13",
+      "brace-expansion": "5.0.6",
       "fast-uri": "3.1.2",
       "ip-address": "10.2.0",
       "lodash": "4.18.1",
