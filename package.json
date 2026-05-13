@@ -32,30 +32,39 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-mono": "latest",
-    "@fontsource/space-grotesk": "latest",
-    "electron-store": "latest",
-    "keytar": "latest",
-    "98.css": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "@fontsource/ibm-plex-mono": "5.2.7",
+    "@fontsource/space-grotesk": "5.2.10",
+    "electron-store": "11.0.2",
+    "keytar": "7.9.0",
+    "98.css": "0.1.21",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "electron": "latest",
-    "electron-builder": "latest",
-    "electron-vite": "latest",
-    "jsdom": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "vitest": "latest"
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "25.5.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.4",
+    "electron": "42.0.1",
+    "electron-builder": "26.8.1",
+    "electron-vite": "5.0.0",
+    "jsdom": "29.0.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.3",
+    "vitest": "4.1.0"
   },
   "pnpm": {
+    "overrides": {
+      "@xmldom/xmldom": "0.9.10",
+      "brace-expansion": "2.0.3",
+      "fast-uri": "3.1.2",
+      "ip-address": "10.2.0",
+      "lodash": "4.18.1",
+      "picomatch": "4.0.4",
+      "postcss": "8.5.14"
+    },
     "onlyBuiltDependencies": [
       "electron",
       "electron-winstaller",
