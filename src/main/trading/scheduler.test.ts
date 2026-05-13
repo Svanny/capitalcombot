@@ -116,6 +116,41 @@ describe("ScheduledOrderScheduler", () => {
     expect(restored[0]?.status).toBe("scheduled");
   });
 
+  it("can restore pending jobs without arming them until startup review passes", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: buildOpenPosition(),
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    store.setSchedules([
+      {
+        id: "schedule_1",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "one-off",
+        runAt: "2026-03-23T10:30:00.000Z",
+        status: "scheduled",
+        createdAt: "2026-03-23T10:00:00.000Z",
+      },
+    ]);
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+
+    const restored = scheduler.restore({ armScheduled: false });
+
+    expect(restored[0]?.status).toBe("scheduled");
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+    expect(placeSpy).not.toHaveBeenCalled();
+
+    scheduler.armScheduledJobs();
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+
+    expect(placeSpy).toHaveBeenCalledTimes(1);
+    expect(store.getState().schedules[0]?.status).toBe("executed");
+  });
+
   it("marks missed one-off jobs when the app was closed past the run time", () => {
     const store = new MemoryAppStateStore();
     store.setSchedules([

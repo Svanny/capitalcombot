@@ -34,6 +34,10 @@ export interface ScheduledExecutionResult {
   resolvedProtection: ResolvedProtection | null;
 }
 
+export interface RestoreOptions {
+  armScheduled?: boolean;
+}
+
 const systemClock: SchedulerClock = {
   now: () => Date.now(),
   setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
@@ -49,9 +53,10 @@ export class ScheduledOrderScheduler {
     private readonly clock: SchedulerClock = systemClock,
   ) {}
 
-  restore(): ScheduledOrderJob[] {
+  restore(options: RestoreOptions = {}): ScheduledOrderJob[] {
+    const armScheduled = options.armScheduled ?? true;
     const restored = assignUniqueJobIds(this.store.getState().schedules)
-      .map((job) => this.restoreJob(job))
+      .map((job) => this.restoreJob(job, armScheduled))
       .sort(sortJobs);
 
     this.store.setSchedules(restored);
@@ -103,6 +108,16 @@ export class ScheduledOrderScheduler {
     return nextSchedules;
   }
 
+  armScheduledJobs(): ScheduledOrderJob[] {
+    const schedules = this.list();
+
+    schedules
+      .filter((job) => job.status === "scheduled")
+      .forEach((job) => this.arm(job));
+
+    return schedules;
+  }
+
   update(jobId: string, input: ScheduledOrderUpdateInput): ScheduledOrderJob {
     const current = this.list().find((job) => job.id === jobId);
 
@@ -135,7 +150,7 @@ export class ScheduledOrderScheduler {
     return nextJob;
   }
 
-  private restoreJob(job: ScheduledOrderJob): ScheduledOrderJob {
+  private restoreJob(job: ScheduledOrderJob, armScheduled: boolean): ScheduledOrderJob {
     if (job.status !== "scheduled") {
       return job;
     }
@@ -159,11 +174,15 @@ export class ScheduledOrderScheduler {
           reason: "Missed repeating run while the app was not running. Next run scheduled.",
           lastError: "Missed while the app was not running.",
         };
-        this.arm(rescheduledJob);
+        if (armScheduled) {
+          this.arm(rescheduledJob);
+        }
         return rescheduledJob;
       }
 
-      this.arm(job);
+      if (armScheduled) {
+        this.arm(job);
+      }
       return job;
     }
 
@@ -176,7 +195,9 @@ export class ScheduledOrderScheduler {
       };
     }
 
-    this.arm(job);
+    if (armScheduled) {
+      this.arm(job);
+    }
     return job;
   }
 

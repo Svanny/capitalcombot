@@ -1,4 +1,4 @@
-import { BrowserWindow, app, nativeImage } from "electron";
+import { BrowserWindow, app, dialog, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CapitalClient } from "./trading/capital/client";
@@ -84,14 +84,52 @@ app.whenReady().then(async () => {
     store.appendExecution(buildExecutionResult("auth", "info", appStateBootstrap.warning));
   }
 
-  scheduler.restore();
   await registerIpcHandlers({
     client,
     store,
     credentials: credentials.store,
     scheduler,
   });
-  createMainWindow();
+  const window = createMainWindow();
+  const restoredSchedules = scheduler.restore({ armScheduled: false });
+  const restoredPendingSchedules = restoredSchedules.filter((job) => job.status === "scheduled");
+
+  if (restoredPendingSchedules.length > 0) {
+    const response = await dialog.showMessageBox(window, {
+      type: "warning",
+      buttons: ["Arm schedules", "Cancel restored schedules"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: "Review restored scheduled orders",
+      message: "Review restored scheduled orders",
+      detail:
+        `${restoredPendingSchedules.length} pending scheduled order(s) were restored from local state. ` +
+        "Arm them only if they still match your current trading intent.",
+    });
+
+    if (response.response === 0) {
+      scheduler.armScheduledJobs();
+      store.appendExecution(
+        buildExecutionResult(
+          "schedule",
+          "info",
+          "Restored scheduled orders were armed after startup confirmation.",
+        ),
+      );
+    } else {
+      restoredPendingSchedules.forEach((job) => {
+        scheduler.cancel(job.id, "Cancelled during startup restore review.");
+      });
+      store.appendExecution(
+        buildExecutionResult(
+          "schedule",
+          "info",
+          "Restored scheduled orders were cancelled during startup review.",
+        ),
+      );
+    }
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
