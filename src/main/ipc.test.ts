@@ -19,6 +19,12 @@ import { MemoryCredentialStore } from "./security/credential-store";
 import { MemoryAppStateStore } from "./state/app-store";
 
 vi.mock("electron", () => ({
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(() => null),
+  },
+  dialog: {
+    showMessageBox: vi.fn(async () => ({ response: 0 })),
+  },
   ipcMain: {
     handle: vi.fn(),
   },
@@ -488,6 +494,58 @@ describe("createIpcHandlers", () => {
       } as never),
     ).rejects.toThrow(/INVALID_INPUT/);
     expect(client.updatePositionProtection).not.toHaveBeenCalled();
+  });
+
+  it("requires main-process user presence before placing market orders", async () => {
+    const client = createMockClient();
+    const userPresence = {
+      confirm: vi.fn(async () => false),
+    };
+    const handlers = createIpcHandlers({
+      client,
+      store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(),
+      scheduler: createMockScheduler(),
+      userPresence,
+    });
+
+    await expect(
+      handlers.openMarket({
+        epic: "XAUUSD",
+        direction: "BUY",
+        size: 1,
+      }),
+    ).rejects.toThrow(/USER_PRESENCE_REQUIRED/);
+
+    expect(userPresence.confirm).toHaveBeenCalledWith(
+      "openMarket",
+      "Place a BUY market order for 1 XAUUSD.",
+    );
+    expect(client.openMarketPosition).not.toHaveBeenCalled();
+  });
+
+  it("requires main-process user presence before reusing saved credentials", async () => {
+    const client = createMockClient();
+    const credentials = new MemoryCredentialStore();
+    await credentials.save({
+      identifier: "trader@example.com",
+      password: "secret",
+      apiKey: "api-key",
+      environment: "demo",
+    });
+    const handlers = createIpcHandlers({
+      client,
+      store: new MemoryAppStateStore(),
+      credentials,
+      scheduler: createMockScheduler(),
+      userPresence: {
+        confirm: vi.fn(async () => false),
+      },
+    });
+
+    await expect(handlers.connectSaved()).rejects.toThrow(/Confirm the Capital.com action/);
+
+    expect(client.connect).not.toHaveBeenCalled();
   });
 
   it("validates registered IPC payloads before dereferencing privileged identifiers", async () => {

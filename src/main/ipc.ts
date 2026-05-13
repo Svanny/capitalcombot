@@ -1,4 +1,5 @@
 import { IPC_CHANNELS } from "../shared/ipc";
+import type { MessageBoxOptions } from "electron";
 import type {
   AppError,
   AuthResponse,
@@ -55,16 +56,52 @@ export interface SchedulerLike {
   update(jobId: string, input: SchedulerScheduledOrderUpdateInput): ScheduledOrderJob;
 }
 
+type HighRiskAction =
+  | "connectSaved"
+  | "openMarket"
+  | "closePosition"
+  | "reversePosition"
+  | "updatePositionProtection"
+  | "cancelSchedule"
+  | "updateSchedule";
+
+export interface UserPresencePrompt {
+  confirm(action: HighRiskAction, detail: string): Promise<boolean>;
+}
+
 export interface IpcDependencies {
   client: TradingClientLike;
   store: AppStateStore;
   credentials: CredentialStore;
   scheduler: SchedulerLike;
+  userPresence?: UserPresencePrompt;
 }
 
 export async function registerIpcHandlers(dependencies: IpcDependencies): Promise<void> {
-  const { ipcMain } = await import("electron");
-  const handlers = createIpcHandlers(dependencies);
+  const { BrowserWindow, dialog, ipcMain } = await import("electron");
+  const handlers = createIpcHandlers({
+    ...dependencies,
+    userPresence: {
+      confirm: async (_action, detail) => {
+        const focusedWindow = BrowserWindow.getFocusedWindow();
+        const options: MessageBoxOptions = {
+          type: "warning",
+          buttons: ["Continue", "Cancel"],
+          cancelId: 1,
+          defaultId: 1,
+          noLink: true,
+          title: "Confirm Capital.com action",
+          message: "Confirm this Capital.com action",
+          detail,
+        };
+        const response = focusedWindow
+          ? await dialog.showMessageBox(focusedWindow, options)
+          : await dialog.showMessageBox(options);
+
+        return response.response === 0;
+      },
+    },
+  });
 
   ipcMain.handle(IPC_CHANNELS.APP_BOOTSTRAP, handlers.bootstrap);
   ipcMain.handle(IPC_CHANNELS.AUTH_CONNECT, (_event, credentials: CapitalCredentials) =>
@@ -96,7 +133,13 @@ export async function registerIpcHandlers(dependencies: IpcDependencies): Promis
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_UPDATE, (_event, input: unknown) => handlers.updateSchedule(input));
 }
 
-export function createIpcHandlers({ client, store, credentials, scheduler }: IpcDependencies) {
+export function createIpcHandlers({
+  client,
+  store,
+  credentials,
+  scheduler,
+  userPresence = allowUserPresenceForTests,
+}: IpcDependencies) {
   const previewProtection = async (
     unsafeInput: unknown,
   ): Promise<ProtectionPreviewResponse> => {
@@ -152,6 +195,12 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
           createAppError("MISSING_SAVED_CREDENTIALS", "No saved Capital.com credentials were found."),
         );
       }
+
+      await requireUserPresence(
+        userPresence,
+        "connectSaved",
+        `Reuse saved Capital.com credentials for ${saved.identifier} in the ${saved.environment} environment.`,
+      );
 
       return connect(saved);
     },
@@ -239,6 +288,13 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
     openMarket: async (unsafeInput: unknown): Promise<OpenMarketOrderResponse> => {
       try {
         const input = validateOpenMarketOrderInput(unsafeInput);
+        await requireUserPresence(
+          userPresence,
+          "openMarket",
+          input.schedule
+            ? `Schedule a ${input.direction} market order for ${input.size} ${input.epic}.`
+            : `Place a ${input.direction} market order for ${input.size} ${input.epic}.`,
+        );
         let scheduledJob = null;
         let position = null;
         const resolvedProtection = !input.schedule && input.protection
@@ -296,6 +352,7 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
           "dealId",
           "Choose a valid Capital.com position before closing it.",
         );
+        await requireUserPresence(userPresence, "closePosition", `Close Capital.com position ${dealId}.`);
         await client.closePosition(dealId);
         const result = buildExecutionResult("close", "success", `Closed position ${dealId}.`);
         store.appendExecution(result);
@@ -314,6 +371,11 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
           unsafeInput,
           "dealId",
           "Choose a valid Capital.com position before reversing it.",
+        );
+        await requireUserPresence(
+          userPresence,
+          "reversePosition",
+          `Close and reopen Capital.com position ${dealId} in the opposite direction.`,
         );
         const position = await client.reversePosition(dealId);
         const result = buildExecutionResult("order", "success", `Reversed position ${dealId}.`);
@@ -348,6 +410,11 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
           );
         }
 
+        await requireUserPresence(
+          userPresence,
+          "updatePositionProtection",
+          `Update stop loss or take profit for Capital.com position ${input.dealId}.`,
+        );
         const position = await client.updatePositionProtection(input.dealId, resolvedProtection);
         const result = buildExecutionResult(
           "order",
@@ -373,6 +440,7 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
           "jobId",
           "Choose a valid scheduled order before cancelling it.",
         );
+        await requireUserPresence(userPresence, "cancelSchedule", `Cancel scheduled order ${jobId}.`);
         const schedules = scheduler.cancel(jobId);
         const result = buildExecutionResult("schedule", "info", "Cancelled scheduled order.");
         store.appendExecution(result);
@@ -388,6 +456,7 @@ export function createIpcHandlers({ client, store, credentials, scheduler }: Ipc
     updateSchedule: async (unsafeInput: unknown): Promise<UpdateScheduledOrderResponse> => {
       try {
         const input = validateScheduledOrderUpdateInput(unsafeInput);
+        await requireUserPresence(userPresence, "updateSchedule", `Update scheduled order ${input.jobId}.`);
         const updated = scheduler.update(input.jobId, {
           direction: input.direction,
           size: input.size,
@@ -430,6 +499,22 @@ function buildBootstrapState(
 
 function serializeError(error: AppError): Error {
   return new Error(JSON.stringify(error));
+}
+
+const allowUserPresenceForTests: UserPresencePrompt = {
+  confirm: async () => true,
+};
+
+async function requireUserPresence(
+  prompt: UserPresencePrompt,
+  action: HighRiskAction,
+  detail: string,
+): Promise<void> {
+  const confirmed = await prompt.confirm(action, detail);
+
+  if (!confirmed) {
+    throw createAppError("USER_PRESENCE_REQUIRED", "Confirm the Capital.com action to continue.", true);
+  }
 }
 
 function validateCapitalCredentials(value: unknown): CapitalCredentials {
