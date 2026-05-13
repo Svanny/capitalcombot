@@ -342,6 +342,43 @@ describe("CapitalClient", () => {
     );
   });
 
+  it("encodes deal identifiers when closing positions", async () => {
+    const responses = [
+      new Response("{}", {
+        status: 200,
+        headers: {
+          CST: "session-cst",
+          "X-SECURITY-TOKEN": "security-token",
+        },
+      }),
+      new Response(JSON.stringify({ dealReference: "p/close 1" }), { status: 200 }),
+      new Response(JSON.stringify({ dealStatus: "ACCEPTED" }), { status: 200 }),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift() ?? new Response("{}", { status: 500 }));
+    const client = new CapitalClient(fetchMock as typeof fetch);
+
+    await client.connect({
+      identifier: "trader@example.com",
+      password: "secret",
+      apiKey: "api-key",
+      environment: "demo",
+    });
+    await client.closePosition("deal/1 with space");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/api/v1/positions/deal%2F1%20with%20space"),
+      expect.objectContaining({
+        method: "DELETE",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("/api/v1/confirms/p%2Fclose%201"),
+      expect.any(Object),
+    );
+  });
+
   it("reverses a position by closing it and reopening the opposite direction", async () => {
     const responses = [
       new Response("{}", {

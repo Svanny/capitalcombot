@@ -283,7 +283,7 @@ export class CapitalClient {
 
   async closePosition(dealId: string): Promise<void> {
     const payload = await this.authorizedJson<{ dealReference?: string }>(
-      `/api/v1/positions/${dealId}`,
+      `/api/v1/positions/${encodeURIComponent(dealId)}`,
       undefined,
       {
         method: "DELETE",
@@ -454,7 +454,7 @@ export class CapitalClient {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         const confirmation = await this.authorizedJson<DealConfirmation>(
-          `/api/v1/confirms/${dealReference}`,
+          `/api/v1/confirms/${encodeURIComponent(dealReference)}`,
         );
 
         if (confirmation.dealStatus === "REJECTED") {
