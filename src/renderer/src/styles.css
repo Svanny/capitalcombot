@@ -665,6 +665,11 @@ a {
   color: var(--ok);
 }
 
+.status-pill.status-paused,
+.status-pill.status-cancelled {
+  color: #5f5f5f;
+}
+
 .status-pill.status-error,
 .status-pill.status-failed,
 .status-pill.status-missed {

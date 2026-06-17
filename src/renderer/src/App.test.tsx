@@ -191,6 +191,24 @@ function buildApi(
           at: "2026-03-23T10:00:00.000Z",
         },
       })),
+      pause: vi.fn(async () => ({
+        schedules: bootstrap.schedules,
+        result: {
+          action: "schedule" as const,
+          status: "info" as const,
+          message: "Paused scheduled order.",
+          at: "2026-03-23T10:00:00.000Z",
+        },
+      })),
+      reactivate: vi.fn(async () => ({
+        schedules: bootstrap.schedules,
+        result: {
+          action: "schedule" as const,
+          status: "success" as const,
+          message: "Reactivated scheduled order for Spot Gold.",
+          at: "2026-03-23T10:00:00.000Z",
+        },
+      })),
       update: vi.fn(async () => ({
         schedules: bootstrap.schedules,
         result: {
@@ -378,7 +396,7 @@ describe("App", () => {
     expect(await screen.findByText("No execution history yet.")).toBeInTheDocument();
   });
 
-  it("shows edit and cancel only for scheduled orders", async () => {
+  it("shows pause, edit, and cancel only for scheduled orders", async () => {
     window.capitalApi = buildApi(connectedBootstrap);
 
     render(<App />);
@@ -387,9 +405,129 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     expect(screen.getAllByText("executed").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Pause" })).toHaveLength(1);
+  });
+
+  it("shows resume and reactivate actions for paused and cancelled orders", async () => {
+    const bootstrap: BootstrapState = {
+      ...connectedBootstrap,
+      schedules: [
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "paused-job",
+          status: "paused",
+          reason: "Paused manually",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "cancelled-job",
+          status: "cancelled",
+          reason: "Cancelled manually",
+        },
+      ],
+    };
+    window.capitalApi = buildApi(bootstrap);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reactivate" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("pauses and reactivates scheduled orders from the portfolio tab", async () => {
+    const api = buildApi(connectedBootstrap);
+    const pausedSchedules = [
+      {
+        ...connectedBootstrap.schedules[0],
+        status: "paused" as const,
+        reason: "Paused manually",
+      },
+      connectedBootstrap.schedules[1],
+    ];
+    const reactivatedSchedules = [
+      {
+        ...connectedBootstrap.schedules[0],
+        status: "scheduled" as const,
+        reason: "Scheduled order reactivated.",
+      },
+      connectedBootstrap.schedules[1],
+    ];
+    api.schedules.list = vi
+      .fn()
+      .mockResolvedValueOnce(connectedBootstrap.schedules)
+      .mockResolvedValueOnce(pausedSchedules)
+      .mockResolvedValue(reactivatedSchedules);
+    api.schedules.pause = vi.fn(async () => ({
+      schedules: pausedSchedules,
+      result: {
+        action: "schedule" as const,
+        status: "info" as const,
+        message: "Paused scheduled order.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+    api.schedules.reactivate = vi.fn(async () => ({
+      schedules: reactivatedSchedules,
+      result: {
+        action: "schedule" as const,
+        status: "success" as const,
+        message: "Reactivated scheduled order for Spot Gold.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+    window.capitalApi = api;
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
+
+    await waitFor(() => {
+      expect(api.schedules.pause).toHaveBeenCalledWith({ jobId: "job-1" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+
+    await waitFor(() => {
+      expect(api.schedules.reactivate).toHaveBeenCalledWith({ jobId: "job-1" });
+    });
+  });
+
+  it("shows stale one-off reactivation errors", async () => {
+    const bootstrap: BootstrapState = {
+      ...connectedBootstrap,
+      schedules: [
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "cancelled-job",
+          runAt: "2026-03-23T08:00:00.000Z",
+          status: "cancelled",
+          reason: "Cancelled manually",
+        },
+      ],
+    };
+    const api = buildApi(bootstrap);
+    api.schedules.reactivate = vi.fn(async () => {
+      throw { message: "Edit this one-off scheduled order to a future time before reactivating it." };
+    });
+    window.capitalApi = api;
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reactivate" }));
+
+    expect(
+      await screen.findByText("Edit this one-off scheduled order to a future time before reactivating it."),
+    ).toBeInTheDocument();
   });
 
   it("prefills and saves scheduled order edits from the portfolio tab", async () => {

@@ -259,6 +259,230 @@ describe("ScheduledOrderScheduler", () => {
     expect(store.getState().schedules[0]?.status).toBe("cancelled");
   });
 
+  it("pauses a scheduled one-off job before it fires", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: null,
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+
+    scheduler.pause(job.id);
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+
+    expect(placeSpy).not.toHaveBeenCalled();
+    expect(store.getState().schedules[0]?.status).toBe("paused");
+    expect(store.getState().schedules[0]?.reason).toBe("Paused manually");
+  });
+
+  it("does not arm paused jobs during restore or startup arming", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: null,
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    store.setSchedules([
+      {
+        id: "schedule_1",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "one-off",
+        runAt: "2026-03-23T10:30:00.000Z",
+        status: "paused",
+        createdAt: "2026-03-23T10:00:00.000Z",
+      },
+    ]);
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+
+    scheduler.restore();
+    scheduler.armScheduledJobs();
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+
+    expect(placeSpy).not.toHaveBeenCalled();
+    expect(store.getState().schedules[0]?.status).toBe("paused");
+  });
+
+  it("reactivates a paused future one-off job", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: buildOpenPosition(),
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    scheduler.pause(job.id);
+
+    const reactivated = scheduler.reactivate(job.id);
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+
+    expect(reactivated.status).toBe("scheduled");
+    expect(reactivated.runAt).toBe("2026-03-23T10:30:00.000Z");
+    expect(placeSpy).toHaveBeenCalledTimes(1);
+    expect(store.getState().schedules[0]?.status).toBe("executed");
+  });
+
+  it("reactivates a cancelled future one-off job", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: buildOpenPosition(),
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    scheduler.cancel(job.id);
+
+    scheduler.reactivate(job.id);
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+
+    expect(placeSpy).toHaveBeenCalledWith(expect.objectContaining({ direction: "SELL" }));
+    expect(store.getState().schedules[0]?.status).toBe("executed");
+  });
+
+  it("reactivates repeating jobs at the next occurrence", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "09:15",
+    });
+    scheduler.cancel(job.id);
+
+    const reactivated = scheduler.reactivate(job.id);
+
+    expect(reactivated.status).toBe("scheduled");
+    expect(reactivated.runTime).toBe("09:15");
+    const nextRun = new Date(reactivated.runAt);
+    expect(nextRun.getHours()).toBe(9);
+    expect(nextRun.getMinutes()).toBe(15);
+    expect(nextRun.getTime()).toBeGreaterThan(Date.parse("2026-03-23T10:00:00.000Z"));
+  });
+
+  it("rejects reactivating stale one-off jobs", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({
+      position: null,
+      resolvedProtection: null,
+    }));
+    const clock = new FakeClock();
+    store.setSchedules([
+      {
+        id: "schedule_1",
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 1,
+        scheduleType: "one-off",
+        runAt: "2026-03-23T09:30:00.000Z",
+        status: "cancelled",
+        createdAt: "2026-03-23T09:00:00.000Z",
+      },
+    ]);
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+
+    expect(() => scheduler.reactivate("schedule_1")).toThrow(/future time/i);
+    await clock.advanceTo("2026-03-23T10:30:00.000Z");
+    expect(placeSpy).not.toHaveBeenCalled();
+    expect(store.getState().schedules[0]?.status).toBe("cancelled");
+  });
+
+  it("rejects pause and reactivate from invalid states", () => {
+    const terminalStatuses = ["executing", "executed", "failed", "missed", "cancelled"] as const;
+
+    terminalStatuses.forEach((status) => {
+      const store = new MemoryAppStateStore();
+      store.setSchedules([
+        {
+          id: `schedule_${status}`,
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-23T10:30:00.000Z",
+          status,
+          createdAt: "2026-03-23T10:00:00.000Z",
+        },
+      ]);
+      const scheduler = new ScheduledOrderScheduler(
+        store,
+        async () => ({ position: null, resolvedProtection: null }),
+        new FakeClock(),
+      );
+
+      expect(() => scheduler.pause(`schedule_${status}`)).toThrow(/pending scheduled orders/i);
+    });
+
+    const nonReactivatableStatuses = ["scheduled", "executing", "executed", "failed", "missed"] as const;
+    nonReactivatableStatuses.forEach((status) => {
+      const store = new MemoryAppStateStore();
+      store.setSchedules([
+        {
+          id: `schedule_${status}`,
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-23T10:30:00.000Z",
+          status,
+          createdAt: "2026-03-23T10:00:00.000Z",
+        },
+      ]);
+      const scheduler = new ScheduledOrderScheduler(
+        store,
+        async () => ({ position: null, resolvedProtection: null }),
+        new FakeClock(),
+      );
+
+      expect(() => scheduler.reactivate(`schedule_${status}`)).toThrow(/paused or cancelled/i);
+    });
+
+    const scheduler = new ScheduledOrderScheduler(
+      new MemoryAppStateStore(),
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    expect(() => scheduler.pause("missing")).toThrow(/No scheduled order/);
+    expect(() => scheduler.reactivate("missing")).toThrow(/No scheduled order/);
+  });
+
   it("keeps protection strategy config on scheduled jobs until execution", () => {
     const store = new MemoryAppStateStore();
     const scheduler = new ScheduledOrderScheduler(

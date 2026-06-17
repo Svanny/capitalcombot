@@ -118,6 +118,8 @@ export default function App() {
     positionProtectionPreview: false,
     positionProtectionSubmit: false,
     scheduleCancel: false,
+    schedulePause: false,
+    scheduleReactivate: false,
     scheduleUpdate: false,
     scheduleProtectionPreview: false,
   });
@@ -723,6 +725,39 @@ export default function App() {
     }
   }
 
+  async function handleSchedulePause(jobId: string): Promise<void> {
+    setLoadingState((current) => ({ ...current, schedulePause: true }));
+    setErrorMessage(null);
+
+    try {
+      const response = await window.capitalApi.schedules.pause({ jobId });
+      setStatusMessage(response.result.message);
+      if (editingScheduledOrderId === jobId) {
+        clearScheduledOrderEditor();
+      }
+      await refreshConnectedData();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoadingState((current) => ({ ...current, schedulePause: false }));
+    }
+  }
+
+  async function handleScheduleReactivate(jobId: string): Promise<void> {
+    setLoadingState((current) => ({ ...current, scheduleReactivate: true }));
+    setErrorMessage(null);
+
+    try {
+      const response = await window.capitalApi.schedules.reactivate({ jobId });
+      setStatusMessage(response.result.message);
+      await refreshConnectedData();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoadingState((current) => ({ ...current, scheduleReactivate: false }));
+    }
+  }
+
   function handleScheduleEdit(job: ScheduledOrderJob): void {
     setEditingScheduledOrderId(job.id);
     setScheduledOrderDirection(job.direction);
@@ -1077,6 +1112,8 @@ export default function App() {
                   />
                   <SchedulePanel
                     loadingCancel={loadingState.scheduleCancel}
+                    loadingPause={loadingState.schedulePause}
+                    loadingReactivate={loadingState.scheduleReactivate}
                     editingJobId={editingScheduledOrderId}
                     editDirection={scheduledOrderDirection}
                     editErrors={scheduledOrderErrors}
@@ -1119,6 +1156,8 @@ export default function App() {
                       setScheduledOrderErrors((current) => ({ ...current, size: undefined }));
                     }}
                     onEditSubmit={handleScheduleUpdate}
+                    onPause={(job) => handleSchedulePause(job.id)}
+                    onReactivate={(job) => handleScheduleReactivate(job.id)}
                     refs={scheduleOrderRefs}
                     schedules={sortedSchedules}
                   />

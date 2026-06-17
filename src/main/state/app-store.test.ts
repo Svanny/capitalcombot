@@ -66,6 +66,53 @@ describe("MemoryAppStateStore", () => {
 
     expect(store.getState().schedules).toEqual([]);
   });
+
+  it("preserves paused schedules during normalization", () => {
+    const store = new MemoryAppStateStore();
+    store.patchState({
+      schedules: [
+        {
+          id: "paused-job",
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-24T06:00:00.000Z",
+          status: "paused",
+          createdAt: "2026-03-24T05:00:00.000Z",
+          reason: "Paused manually",
+        },
+      ],
+    });
+
+    expect(store.getState().schedules[0]).toMatchObject({
+      id: "paused-job",
+      status: "paused",
+      reason: "Paused manually",
+    });
+  });
+
+  it("filters out schedules with unknown statuses", () => {
+    const store = new MemoryAppStateStore();
+    store.patchState({
+      schedules: [
+        {
+          id: "unknown-status-job",
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-24T06:00:00.000Z",
+          status: "snoozed",
+          createdAt: "2026-03-24T05:00:00.000Z",
+        } as never,
+      ],
+    });
+
+    expect(store.getState().schedules).toEqual([]);
+  });
 });
 
 describe("createAppStateStore", () => {

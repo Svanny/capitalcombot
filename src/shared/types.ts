@@ -9,6 +9,7 @@ export type ScheduledOrderStatus =
   | "executed"
   | "failed"
   | "missed"
+  | "paused"
   | "cancelled";
 
 export interface StopLossStrategy {
@@ -164,6 +165,14 @@ export interface ScheduledOrderCancelInput {
   jobId: string;
 }
 
+export interface ScheduledOrderPauseInput {
+  jobId: string;
+}
+
+export interface ScheduledOrderReactivateInput {
+  jobId: string;
+}
+
 export interface ScheduledOrderUpdateInput {
   jobId: string;
   direction: TradeDirection;
@@ -212,6 +221,16 @@ export interface CancelScheduledOrderResponse {
   result: ExecutionResult;
 }
 
+export interface PauseScheduledOrderResponse {
+  schedules: ScheduledOrderJob[];
+  result: ExecutionResult;
+}
+
+export interface ReactivateScheduledOrderResponse {
+  schedules: ScheduledOrderJob[];
+  result: ExecutionResult;
+}
+
 export interface UpdateScheduledOrderResponse {
   schedules: ScheduledOrderJob[];
   result: ExecutionResult;
@@ -256,6 +275,8 @@ export interface CapitalDesktopApi {
   schedules: {
     list: () => Promise<ScheduledOrderJob[]>;
     cancel: (input: ScheduledOrderCancelInput) => Promise<CancelScheduledOrderResponse>;
+    pause: (input: ScheduledOrderPauseInput) => Promise<PauseScheduledOrderResponse>;
+    reactivate: (input: ScheduledOrderReactivateInput) => Promise<ReactivateScheduledOrderResponse>;
     update: (input: ScheduledOrderUpdateInput) => Promise<UpdateScheduledOrderResponse>;
   };
 }

@@ -9,6 +9,8 @@ import type {
   PositionCloseInput,
   PositionReverseInput,
   ScheduledOrderCancelInput,
+  ScheduledOrderPauseInput,
+  ScheduledOrderReactivateInput,
   ScheduledOrderUpdateInput,
   UpdatePositionProtectionInput,
 } from "../shared/types";
@@ -73,6 +75,9 @@ const api: CapitalDesktopApi = {
   schedules: {
     list: () => invoke(IPC_CHANNELS.SCHEDULES_LIST),
     cancel: (input: ScheduledOrderCancelInput) => invoke(IPC_CHANNELS.SCHEDULES_CANCEL, input),
+    pause: (input: ScheduledOrderPauseInput) => invoke(IPC_CHANNELS.SCHEDULES_PAUSE, input),
+    reactivate: (input: ScheduledOrderReactivateInput) =>
+      invoke(IPC_CHANNELS.SCHEDULES_REACTIVATE, input),
     update: (input: ScheduledOrderUpdateInput) => invoke(IPC_CHANNELS.SCHEDULES_UPDATE, input),
   },
 };

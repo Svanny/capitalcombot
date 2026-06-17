@@ -108,6 +108,92 @@ export class ScheduledOrderScheduler {
     return nextSchedules;
   }
 
+  pause(jobId: string, reason = "Paused manually"): ScheduledOrderJob[] {
+    const current = this.list().find((job) => job.id === jobId);
+
+    if (!current) {
+      throw createAppError("MISSING_SCHEDULE", "No scheduled order was found to pause.", true);
+    }
+
+    if (current.status !== "scheduled") {
+      throw createAppError(
+        "INVALID_SCHEDULE_STATE",
+        "Only pending scheduled orders can be paused.",
+        true,
+      );
+    }
+
+    this.disarm(current.id);
+    const nextSchedules = this.list().map((job) =>
+      job.id === jobId
+        ? {
+            ...job,
+            status: "paused" as const,
+            reason,
+          }
+        : job,
+    );
+
+    this.store.setSchedules(nextSchedules);
+    return nextSchedules;
+  }
+
+  reactivate(jobId: string): ScheduledOrderJob {
+    const current = this.list().find((job) => job.id === jobId);
+
+    if (!current) {
+      throw createAppError("MISSING_SCHEDULE", "No scheduled order was found to reactivate.", true);
+    }
+
+    if (current.status !== "paused" && current.status !== "cancelled") {
+      throw createAppError(
+        "INVALID_SCHEDULE_STATE",
+        "Only paused or cancelled scheduled orders can be reactivated.",
+        true,
+      );
+    }
+
+    const nowMs = this.clock.now();
+    let nextJob: ScheduledOrderJob;
+
+    if (current.scheduleType === "repeating") {
+      if (!current.runTime || !isValidRunTime(current.runTime)) {
+        throw createAppError(
+          "INVALID_SCHEDULE_STATE",
+          "Repeating schedule time is invalid. Edit the scheduled order before reactivating it.",
+          true,
+        );
+      }
+
+      nextJob = {
+        ...current,
+        status: "scheduled",
+        runAt: getNextOccurrenceFromTime(current.runTime, nowMs).toISOString(),
+        reason: "Scheduled order reactivated.",
+        lastError: undefined,
+      };
+    } else {
+      if (new Date(current.runAt).getTime() <= nowMs) {
+        throw createAppError(
+          "INVALID_SCHEDULE_STATE",
+          "Edit this one-off scheduled order to a future time before reactivating it.",
+          true,
+        );
+      }
+
+      nextJob = {
+        ...current,
+        status: "scheduled",
+        reason: "Scheduled order reactivated.",
+        lastError: undefined,
+      };
+    }
+
+    this.replaceJob(nextJob);
+    this.arm(nextJob);
+    return nextJob;
+  }
+
   armScheduledJobs(): ScheduledOrderJob[] {
     const schedules = this.list();
 

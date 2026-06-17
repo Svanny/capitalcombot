@@ -11,10 +11,12 @@ import type {
   OpenMarketOrderInput,
   OpenMarketOrderResponse,
   OpenPosition,
+  PauseScheduledOrderResponse,
   ProtectionStrategy,
   ProtectionPreviewInput,
   ProtectionPreviewResponse,
   QuoteSnapshot,
+  ReactivateScheduledOrderResponse,
   ReversePositionResponse,
   ScheduledOrderJob,
   ScheduledOrderUpdateInput,
@@ -53,6 +55,8 @@ export interface SchedulerLike {
   list(): ScheduledOrderJob[];
   schedule(input: ScheduledOrderInput): ScheduledOrderJob;
   cancel(jobId: string, reason?: string): ScheduledOrderJob[];
+  pause(jobId: string, reason?: string): ScheduledOrderJob[];
+  reactivate(jobId: string): ScheduledOrderJob;
   update(jobId: string, input: SchedulerScheduledOrderUpdateInput): ScheduledOrderJob;
 }
 
@@ -63,6 +67,8 @@ type HighRiskAction =
   | "reversePosition"
   | "updatePositionProtection"
   | "cancelSchedule"
+  | "pauseSchedule"
+  | "reactivateSchedule"
   | "updateSchedule";
 
 export interface UserPresencePrompt {
@@ -130,6 +136,10 @@ export async function registerIpcHandlers(dependencies: IpcDependencies): Promis
   );
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_LIST, handlers.listSchedules);
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_CANCEL, (_event, input: unknown) => handlers.cancelSchedule(input));
+  ipcMain.handle(IPC_CHANNELS.SCHEDULES_PAUSE, (_event, input: unknown) => handlers.pauseSchedule(input));
+  ipcMain.handle(IPC_CHANNELS.SCHEDULES_REACTIVATE, (_event, input: unknown) =>
+    handlers.reactivateSchedule(input),
+  );
   ipcMain.handle(IPC_CHANNELS.SCHEDULES_UPDATE, (_event, input: unknown) => handlers.updateSchedule(input));
 }
 
@@ -446,6 +456,56 @@ export function createIpcHandlers({
         store.appendExecution(result);
         return {
           schedules,
+          result,
+        };
+      } catch (error) {
+        throw serializeError(normalizeError(error));
+      }
+    },
+
+    pauseSchedule: async (unsafeInput: unknown): Promise<PauseScheduledOrderResponse> => {
+      try {
+        const jobId = extractIdentifier(
+          unsafeInput,
+          "jobId",
+          "Choose a valid scheduled order before pausing it.",
+        );
+        await requireUserPresence(userPresence, "pauseSchedule", `Pause scheduled order ${jobId}.`);
+        const schedules = scheduler.pause(jobId);
+        const result = buildExecutionResult("schedule", "info", "Paused scheduled order.");
+        store.appendExecution(result);
+        return {
+          schedules,
+          result,
+        };
+      } catch (error) {
+        throw serializeError(normalizeError(error));
+      }
+    },
+
+    reactivateSchedule: async (
+      unsafeInput: unknown,
+    ): Promise<ReactivateScheduledOrderResponse> => {
+      try {
+        const jobId = extractIdentifier(
+          unsafeInput,
+          "jobId",
+          "Choose a valid scheduled order before reactivating it.",
+        );
+        await requireUserPresence(
+          userPresence,
+          "reactivateSchedule",
+          `Reactivate scheduled order ${jobId}.`,
+        );
+        const reactivated = scheduler.reactivate(jobId);
+        const result = buildExecutionResult(
+          "schedule",
+          "success",
+          `Reactivated scheduled order for ${reactivated.instrumentName}.`,
+        );
+        store.appendExecution(result);
+        return {
+          schedules: scheduler.list(),
           result,
         };
       } catch (error) {

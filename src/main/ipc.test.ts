@@ -154,6 +154,31 @@ function createMockScheduler(): SchedulerLike {
           : job,
       ),
     ),
+    pause: vi.fn((jobId: string) => {
+      const nextSchedules = schedules.map((job) =>
+        job.id === jobId && job.status === "scheduled"
+          ? { ...job, status: "paused" as const, reason: "Paused manually" }
+          : job,
+      );
+      schedules.splice(0, schedules.length, ...nextSchedules);
+      return schedules.slice();
+    }),
+    reactivate: vi.fn((jobId: string) => {
+      const current = schedules.find((job) => job.id === jobId);
+
+      if (!current) {
+        throw new Error("missing schedule");
+      }
+
+      const nextJob: ScheduledOrderJob = {
+        ...current,
+        status: "scheduled",
+        reason: "Scheduled order reactivated.",
+      };
+      const index = schedules.findIndex((job) => job.id === jobId);
+      schedules.splice(index, 1, nextJob);
+      return nextJob;
+    }),
     update: vi.fn((jobId, input) => {
       const current = schedules.find((job) => job.id === jobId);
 
@@ -353,6 +378,57 @@ describe("createIpcHandlers", () => {
     expect(scheduler.cancel).toHaveBeenCalledWith("schedule_XAUUSD");
   });
 
+  it("pauses a scheduled order by job id", async () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = createMockScheduler();
+    await scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T11:00:00.000Z",
+    });
+    const handlers = createIpcHandlers({
+      client: createMockClient(),
+      store,
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+    });
+
+    const response = await handlers.pauseSchedule({ jobId: "schedule_XAUUSD" });
+
+    expect(response.schedules[0]?.status).toBe("paused");
+    expect(response.result.message).toBe("Paused scheduled order.");
+    expect(scheduler.pause).toHaveBeenCalledWith("schedule_XAUUSD");
+  });
+
+  it("reactivates a paused or cancelled scheduled order by job id", async () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = createMockScheduler();
+    await scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T11:00:00.000Z",
+    });
+    scheduler.pause("schedule_XAUUSD");
+    const handlers = createIpcHandlers({
+      client: createMockClient(),
+      store,
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+    });
+
+    const response = await handlers.reactivateSchedule({ jobId: "schedule_XAUUSD" });
+
+    expect(response.schedules[0]?.status).toBe("scheduled");
+    expect(response.result.message).toBe("Reactivated scheduled order for Spot Gold.");
+    expect(scheduler.reactivate).toHaveBeenCalledWith("schedule_XAUUSD");
+  });
+
   it("updates a scheduled order by job id", async () => {
     const store = new MemoryAppStateStore();
     const scheduler = createMockScheduler();
@@ -548,6 +624,38 @@ describe("createIpcHandlers", () => {
     expect(client.connect).not.toHaveBeenCalled();
   });
 
+  it("requires main-process user presence before pausing or reactivating schedules", async () => {
+    const scheduler = createMockScheduler();
+    const userPresence = {
+      confirm: vi.fn(async () => false),
+    };
+    const handlers = createIpcHandlers({
+      client: createMockClient(),
+      store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+      userPresence,
+    });
+
+    await expect(handlers.pauseSchedule({ jobId: "schedule_XAUUSD" })).rejects.toThrow(
+      /USER_PRESENCE_REQUIRED/,
+    );
+    await expect(handlers.reactivateSchedule({ jobId: "schedule_XAUUSD" })).rejects.toThrow(
+      /USER_PRESENCE_REQUIRED/,
+    );
+
+    expect(userPresence.confirm).toHaveBeenCalledWith(
+      "pauseSchedule",
+      "Pause scheduled order schedule_XAUUSD.",
+    );
+    expect(userPresence.confirm).toHaveBeenCalledWith(
+      "reactivateSchedule",
+      "Reactivate scheduled order schedule_XAUUSD.",
+    );
+    expect(scheduler.pause).not.toHaveBeenCalled();
+    expect(scheduler.reactivate).not.toHaveBeenCalled();
+  });
+
   it("validates registered IPC payloads before dereferencing privileged identifiers", async () => {
     vi.mocked(ipcMain.handle).mockClear();
     const client = createMockClient();
@@ -563,16 +671,22 @@ describe("createIpcHandlers", () => {
     const close = registrations.get(IPC_CHANNELS.POSITIONS_CLOSE);
     const reverse = registrations.get(IPC_CHANNELS.POSITIONS_REVERSE);
     const cancel = registrations.get(IPC_CHANNELS.SCHEDULES_CANCEL);
+    const pause = registrations.get(IPC_CHANNELS.SCHEDULES_PAUSE);
+    const reactivate = registrations.get(IPC_CHANNELS.SCHEDULES_REACTIVATE);
     const update = registrations.get(IPC_CHANNELS.SCHEDULES_UPDATE);
 
     expect(close).toBeTypeOf("function");
     expect(reverse).toBeTypeOf("function");
     expect(cancel).toBeTypeOf("function");
+    expect(pause).toBeTypeOf("function");
+    expect(reactivate).toBeTypeOf("function");
     expect(update).toBeTypeOf("function");
 
     await expect(close?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     await expect(reverse?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     await expect(cancel?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    await expect(pause?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
+    await expect(reactivate?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     await expect(update?.({} as never, null)).rejects.toThrow(/INVALID_INPUT/);
     expect(client.closePosition).not.toHaveBeenCalled();
     expect(client.reversePosition).not.toHaveBeenCalled();

@@ -26,6 +26,8 @@ interface SchedulePanelProps {
   editSize: string;
   loadingCancel: boolean;
   loadingEditPreview: boolean;
+  loadingPause: boolean;
+  loadingReactivate: boolean;
   loadingUpdate: boolean;
   onCancel: (job: ScheduledOrderJob) => Promise<void>;
   onEdit: (job: ScheduledOrderJob) => void;
@@ -40,6 +42,8 @@ interface SchedulePanelProps {
   onEditScheduleTypeChange: (value: ScheduledOrderType) => void;
   onEditSizeChange: (value: string) => void;
   onEditSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onPause: (job: ScheduledOrderJob) => Promise<void>;
+  onReactivate: (job: ScheduledOrderJob) => Promise<void>;
   refs: Pick<Record<OrderFieldName, RefObject<HTMLInputElement | null>>, "size" | "scheduleAt">;
   schedules: ScheduledOrderJob[];
 }
@@ -59,6 +63,8 @@ export function SchedulePanel({
   editSize,
   loadingCancel,
   loadingEditPreview,
+  loadingPause,
+  loadingReactivate,
   loadingUpdate,
   onCancel,
   onEdit,
@@ -70,6 +76,8 @@ export function SchedulePanel({
   onEditScheduleTypeChange,
   onEditSizeChange,
   onEditSubmit,
+  onPause,
+  onReactivate,
   refs,
   schedules,
 }: SchedulePanelProps) {
@@ -99,6 +107,8 @@ export function SchedulePanel({
             schedules.map((job) => {
               const isEditing = editingJobId === job.id;
               const isPending = job.status === "scheduled";
+              const isPaused = job.status === "paused";
+              const isCancelled = job.status === "cancelled";
 
               return (
                 <article key={job.id} className="schedule-card">
@@ -126,6 +136,14 @@ export function SchedulePanel({
                       <button
                         type="button"
                         className="ghost"
+                        disabled={loadingPause}
+                        onClick={() => void onPause(job)}
+                      >
+                        Pause
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
                         disabled={loadingUpdate}
                         onClick={() => onEdit(job)}
                       >
@@ -138,6 +156,18 @@ export function SchedulePanel({
                         onClick={() => void onCancel(job)}
                       >
                         Cancel
+                      </button>
+                    </div>
+                  ) : null}
+                  {isPaused || isCancelled ? (
+                    <div className="inline-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={loadingReactivate}
+                        onClick={() => void onReactivate(job)}
+                      >
+                        {isPaused ? "Resume" : "Reactivate"}
                       </button>
                     </div>
                   ) : null}

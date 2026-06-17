@@ -386,7 +386,7 @@ function parseScheduledOrderJob(value: unknown): ScheduledOrderJob | null {
 }
 
 function parseScheduledStatus(value: unknown): ScheduledOrderJob["status"] | null {
-  return ["scheduled", "executing", "executed", "failed", "missed", "cancelled"].includes(String(value))
+  return ["scheduled", "executing", "executed", "failed", "missed", "paused", "cancelled"].includes(String(value))
     ? (value as ScheduledOrderJob["status"])
     : null;
 }
