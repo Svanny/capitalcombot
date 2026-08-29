@@ -1,15 +1,43 @@
 import type {
   ResolvedProtection,
   ScheduledOrderJob,
+  ScheduledOrderStatus,
   ScheduledOrderType,
   TradeDirection,
 } from "@shared/types";
-import type { FormEvent, RefObject } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent, RefObject } from "react";
 import type { OrderFieldName } from "../../lib/validation";
 import type { ProtectionFieldName, ProtectionFormState } from "../../lib/protection-form";
 import { formatDateTime, formatTime } from "../../lib/formatters";
 import { ProtectionStrategyFields } from "../../ui/ProtectionStrategyFields";
 import { WindowHelpButton } from "../../ui/WindowHelpButton";
+
+type ScheduleTabId = "active" | "failed" | "cancelled";
+type SortDirection = "ascending" | "descending";
+
+const SCHEDULE_TAB_ORDER: readonly ScheduleTabId[] = ["active", "failed", "cancelled"];
+
+const SCHEDULE_TAB_LABELS: Record<ScheduleTabId, string> = {
+  active: "Active",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+const SCHEDULE_EMPTY_STATES: Record<ScheduleTabId, { title: string; description: string }> = {
+  active: {
+    title: "No active orders.",
+    description: "Scheduled, executing, and paused orders will appear here.",
+  },
+  failed: {
+    title: "No failed orders.",
+    description: "Orders that failed or missed their execution window will appear here.",
+  },
+  cancelled: {
+    title: "No cancelled orders.",
+    description: "Orders cancelled manually will appear here.",
+  },
+};
 
 interface SchedulePanelProps {
   editingJobId: string | null;
@@ -81,6 +109,60 @@ export function SchedulePanel({
   refs,
   schedules,
 }: SchedulePanelProps) {
+  const [selectedTab, setSelectedTab] = useState<ScheduleTabId>("active");
+  const scheduleTabRefs = useRef<Partial<Record<ScheduleTabId, HTMLAnchorElement | null>>>({});
+  const schedulesByTab = useMemo(() => {
+    const grouped: Record<ScheduleTabId, ScheduledOrderJob[]> = {
+      active: [],
+      failed: [],
+      cancelled: [],
+    };
+
+    for (const job of schedules) {
+      const tab = getScheduleTab(job.status);
+
+      if (tab) {
+        grouped[tab].push(job);
+      }
+    }
+
+    grouped.active.sort((left, right) => compareScheduleDates(left.runAt, right.runAt, "ascending"));
+    grouped.failed.sort((left, right) =>
+      compareScheduleDates(left.lastAttemptAt ?? left.runAt, right.lastAttemptAt ?? right.runAt, "descending"),
+    );
+    grouped.cancelled.sort((left, right) =>
+      compareScheduleDates(left.createdAt, right.createdAt, "descending"),
+    );
+
+    return grouped;
+  }, [schedules]);
+  const visibleSchedules = schedulesByTab[selectedTab];
+  const emptyState = SCHEDULE_EMPTY_STATES[selectedTab];
+
+  function handleScheduleTabKeyDown(event: KeyboardEvent<HTMLAnchorElement>, currentTab: ScheduleTabId): void {
+    const currentIndex = SCHEDULE_TAB_ORDER.indexOf(currentTab);
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (currentIndex + 1) % SCHEDULE_TAB_ORDER.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (currentIndex - 1 + SCHEDULE_TAB_ORDER.length) % SCHEDULE_TAB_ORDER.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = SCHEDULE_TAB_ORDER.length - 1;
+    }
+
+    if (nextIndex === null) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextTab = SCHEDULE_TAB_ORDER[nextIndex];
+    setSelectedTab(nextTab);
+    scheduleTabRefs.current[nextTab]?.focus();
+  }
+
   return (
     <section className="window section-window schedule-window">
       <div className="title-bar">
@@ -97,14 +179,47 @@ export function SchedulePanel({
         </div>
       </div>
       <div className="window-body section-window-body schedule-window-body">
-        <div className="schedule-list schedule-scroll-list">
-          {schedules.length === 0 ? (
+        <menu className="workspace-tabs schedule-tabs" role="tablist" aria-label="Scheduled order status">
+          {SCHEDULE_TAB_ORDER.map((tabId) => (
+            <li
+              key={tabId}
+              id={`schedule-tab-${tabId}`}
+              role="tab"
+              aria-controls={`schedule-panel-${tabId}`}
+              aria-selected={selectedTab === tabId}
+            >
+              <a
+                href={`#schedule-${tabId}`}
+                ref={(element) => {
+                  scheduleTabRefs.current[tabId] = element;
+                }}
+                tabIndex={selectedTab === tabId ? 0 : -1}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setSelectedTab(tabId);
+                }}
+                onKeyDown={(event) => handleScheduleTabKeyDown(event, tabId)}
+              >
+                {SCHEDULE_TAB_LABELS[tabId]} ({schedulesByTab[tabId].length})
+              </a>
+            </li>
+          ))}
+        </menu>
+
+        <div
+          id={`schedule-panel-${selectedTab}`}
+          role="tabpanel"
+          aria-labelledby={`schedule-tab-${selectedTab}`}
+          className="schedule-list schedule-scroll-list schedule-tabpanel"
+          tabIndex={0}
+        >
+          {visibleSchedules.length === 0 ? (
             <div className="empty-state">
-              <strong>No scheduled orders.</strong>
-              <p>Use the Trading tab to queue a market order for a later date or daily time.</p>
+              <strong>{emptyState.title}</strong>
+              <p>{emptyState.description}</p>
             </div>
           ) : (
-            schedules.map((job) => {
+            visibleSchedules.map((job) => {
               const isEditing = editingJobId === job.id;
               const isPending = job.status === "scheduled";
               const isPaused = job.status === "paused";
@@ -114,7 +229,10 @@ export function SchedulePanel({
                 <article key={job.id} className="schedule-card">
                   <div className="schedule-card-header">
                     <strong>
-                      {job.direction} {formatOrderSize(job.size)} {job.instrumentName}
+                      <span className={`order-direction order-direction-${job.direction.toLowerCase()}`}>
+                        {job.direction}
+                      </span>{" "}
+                      {formatOrderSize(job.size)} {job.instrumentName}
                     </strong>
                     <p>
                       {job.scheduleType === "repeating" && job.runTime
@@ -308,6 +426,44 @@ export function SchedulePanel({
       </div>
     </section>
   );
+}
+
+function getScheduleTab(status: ScheduledOrderStatus): ScheduleTabId | null {
+  switch (status) {
+    case "scheduled":
+    case "executing":
+    case "paused":
+      return "active";
+    case "failed":
+    case "missed":
+      return "failed";
+    case "cancelled":
+      return "cancelled";
+    case "executed":
+      return null;
+  }
+}
+
+function compareScheduleDates(
+  leftValue: string | undefined,
+  rightValue: string | undefined,
+  direction: SortDirection,
+): number {
+  const leftTime = leftValue ? new Date(leftValue).getTime() : Number.NaN;
+  const rightTime = rightValue ? new Date(rightValue).getTime() : Number.NaN;
+  const leftIsInvalid = Number.isNaN(leftTime);
+  const rightIsInvalid = Number.isNaN(rightTime);
+
+  if (leftIsInvalid || rightIsInvalid) {
+    if (leftIsInvalid === rightIsInvalid) {
+      return 0;
+    }
+
+    return leftIsInvalid ? 1 : -1;
+  }
+
+  const difference = leftTime - rightTime;
+  return direction === "ascending" ? difference : -difference;
 }
 
 function formatOrderSize(size: number): string {

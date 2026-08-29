@@ -386,13 +386,6 @@ export default function App() {
     [bootstrap.executionLog],
   );
 
-  const sortedSchedules = useMemo(
-    () =>
-      bootstrap.schedules.slice().sort((left, right) => {
-        return new Date(right.runAt).getTime() - new Date(left.runAt).getTime();
-      }),
-    [bootstrap.schedules],
-  );
   const editingScheduledOrder = useMemo(
     () => bootstrap.schedules.find((job) => job.id === editingScheduledOrderId) ?? null,
     [bootstrap.schedules, editingScheduledOrderId],
@@ -1159,7 +1152,7 @@ export default function App() {
                     onPause={(job) => handleSchedulePause(job.id)}
                     onReactivate={(job) => handleScheduleReactivate(job.id)}
                     refs={scheduleOrderRefs}
-                    schedules={sortedSchedules}
+                    schedules={bootstrap.schedules}
                   />
                 </div>
               ) : null}

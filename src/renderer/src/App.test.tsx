@@ -390,7 +390,11 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
     expect(await screen.findByText("No open positions.")).toBeInTheDocument();
-    expect(await screen.findByText("No scheduled orders.")).toBeInTheDocument();
+    expect(await screen.findByText("No active orders.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Failed (0)" }));
+    expect(await screen.findByText("No failed orders.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Cancelled (0)" }));
+    expect(await screen.findByText("No cancelled orders.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Trading" }));
     expect(await screen.findByText("No execution history yet.")).toBeInTheDocument();
@@ -406,7 +410,10 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
-    expect(screen.getAllByText("executed").length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: "Active (1)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Failed (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cancelled (0)" })).toBeInTheDocument();
+    expect(screen.queryByText("executed", { exact: true })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Pause" })).toHaveLength(1);
@@ -437,6 +444,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
 
     expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Cancelled (1)" }));
     expect(screen.getByRole("button", { name: "Reactivate" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
@@ -523,6 +531,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Cancelled (1)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Reactivate" }));
 
     expect(
@@ -593,7 +602,119 @@ describe("App", () => {
     });
   });
 
-  it("renders activity, schedules, and positions in descending chronological order", async () => {
+  it("groups schedules into counted tabs and sorts each tab by its status-specific time", async () => {
+    const bootstrap: BootstrapState = {
+      ...connectedBootstrap,
+      schedules: [
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "active-later",
+          direction: "SELL",
+          runAt: "2026-03-23T14:00:00.000Z",
+          status: "scheduled",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "active-earlier",
+          direction: "BUY",
+          runAt: "2026-03-23T11:00:00.000Z",
+          status: "paused",
+          reason: "Paused manually",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "failed-new",
+          direction: "SELL",
+          runAt: "2026-03-23T08:00:00.000Z",
+          lastAttemptAt: "2026-03-23T13:00:00.000Z",
+          status: "failed",
+          reason: "Most recent failure",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "missed-middle",
+          direction: "BUY",
+          runAt: "2026-03-23T07:00:00.000Z",
+          lastAttemptAt: "2026-03-23T12:00:00.000Z",
+          status: "missed",
+          reason: "Missed execution",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "failed-fallback",
+          direction: "BUY",
+          runAt: "2026-03-23T11:00:00.000Z",
+          status: "failed",
+          reason: "Fallback failure",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "cancelled-old",
+          direction: "BUY",
+          createdAt: "2026-03-23T09:00:00.000Z",
+          runAt: "2026-03-23T14:00:00.000Z",
+          status: "cancelled",
+          reason: "Older cancellation",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "cancelled-new",
+          direction: "SELL",
+          createdAt: "2026-03-23T14:00:00.000Z",
+          runAt: "2026-03-23T08:00:00.000Z",
+          status: "cancelled",
+          reason: "Newer cancellation",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "executed-job",
+          runAt: "2026-03-23T15:00:00.000Z",
+          status: "executed",
+        },
+      ],
+    };
+    window.capitalApi = buildApi(bootstrap);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+
+    expect(screen.getByRole("tab", { name: "Active (2)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Failed (3)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cancelled (2)" })).toBeInTheDocument();
+
+    const getVisibleScheduleCards = () => Array.from(document.querySelectorAll<HTMLElement>(".schedule-card"));
+    let scheduleCards = getVisibleScheduleCards();
+    expect(scheduleCards[0]).toHaveTextContent("BUY 1 Spot Gold");
+    expect(scheduleCards[1]).toHaveTextContent("SELL 1 Spot Gold");
+    expect(screen.getByText("BUY", { exact: true })).toHaveClass("order-direction", "order-direction-buy");
+    expect(screen.getByText("SELL", { exact: true })).toHaveClass("order-direction", "order-direction-sell");
+    expect(screen.getByText("scheduled", { exact: true })).toHaveClass("status-pill", "status-scheduled");
+    expect(screen.queryByText("executed", { exact: true })).not.toBeInTheDocument();
+
+    const activeTab = screen.getByRole("link", { name: "Active (2)" });
+    fireEvent.keyDown(activeTab, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Failed (3)" })).toHaveAttribute("aria-selected", "true");
+
+    scheduleCards = getVisibleScheduleCards();
+    expect(scheduleCards[0]).toHaveTextContent("Most recent failure");
+    expect(scheduleCards[1]).toHaveTextContent("Missed execution");
+    expect(scheduleCards[2]).toHaveTextContent("Fallback failure");
+    screen.getAllByText("failed", { exact: true }).forEach((status) => {
+      expect(status).toHaveClass("status-pill", "status-failed");
+    });
+    expect(screen.getByText("missed", { exact: true })).toHaveClass("status-pill", "status-missed");
+
+    fireEvent.click(screen.getByRole("link", { name: "Cancelled (2)" }));
+    scheduleCards = getVisibleScheduleCards();
+    expect(scheduleCards[0]).toHaveTextContent("Newer cancellation");
+    expect(scheduleCards[1]).toHaveTextContent("Older cancellation");
+    screen.getAllByText("cancelled", { exact: true }).forEach((status) => {
+      expect(status).toHaveClass("status-pill", "status-cancelled");
+    });
+  });
+
+  it("renders activity, active schedules, and positions in their configured chronological order", async () => {
     const api = buildApi(connectedBootstrap, {
       positions: [
         buildPosition({
@@ -618,8 +739,8 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "Portfolio" }));
     const scheduleCards = screen.getAllByText(/One-off at/);
-    expect(scheduleCards[0].closest(".schedule-card")).toHaveTextContent("SELL 1 Spot Gold");
-    expect(scheduleCards[1].closest(".schedule-card")).toHaveTextContent("BUY 1 Spot Gold");
+    expect(scheduleCards).toHaveLength(1);
+    expect(scheduleCards[0].closest(".schedule-card")).toHaveTextContent("BUY 1 Spot Gold");
 
     const positionsTable = screen.getByRole("table");
     const bodyRows = within(positionsTable).getAllByRole("row").slice(1);
