@@ -49,7 +49,7 @@ const TAB_LABELS: Record<TabId, string> = {
 
 const EMPTY_BOOTSTRAP: BootstrapState = {
   connected: false,
-  environment: "demo",
+  environment: "live",
   selectedMarket: null,
   schedules: [],
   executionLog: [],
@@ -101,7 +101,7 @@ export default function App() {
     identifier: "",
     password: "",
     apiKey: "",
-    environment: "demo",
+    environment: "live",
   });
   const [authErrors, setAuthErrors] = useState<Partial<Record<AuthFieldName, string>>>({});
   const [orderErrors, setOrderErrors] = useState<Partial<Record<OrderFieldName, string>>>({});
@@ -303,7 +303,7 @@ export default function App() {
 
     const currentJob = bootstrap.schedules.find((job) => job.id === editingScheduledOrderId);
 
-    if (!currentJob || currentJob.status !== "scheduled") {
+    if (!currentJob || (currentJob.status !== "scheduled" && currentJob.status !== "paused")) {
       clearScheduledOrderEditor();
     }
   }, [bootstrap.schedules, editingScheduledOrderId]);
@@ -471,7 +471,7 @@ export default function App() {
       setStatusMessage(response.result.message);
       setAuthErrors({});
       applyBootstrap(response.state);
-      selectTab(response.state.selectedMarket ? "trade" : "setup");
+      selectTab("positions");
       await refreshConnectedData(response.state);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -489,7 +489,8 @@ export default function App() {
       setStatusMessage(response.result.message);
       setAuthErrors({});
       applyBootstrap(response.state);
-      selectTab(response.state.selectedMarket ? "trade" : "setup");
+      setAuthForm({ ...response.credentials });
+      selectTab("positions");
       await refreshConnectedData(response.state);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -824,7 +825,8 @@ export default function App() {
         size: validation.normalizedSize!,
         schedule: validation.schedule,
         protection:
-          protectionValidation.strategy && hasProtectionStrategy(protectionValidation.strategy)
+          protectionValidation.strategy &&
+          hasProtectionStrategy(protectionValidation.strategy)
             ? protectionValidation.strategy
             : null,
       });
@@ -833,6 +835,42 @@ export default function App() {
       await refreshConnectedData();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoadingState((current) => ({ ...current, scheduleUpdate: false }));
+    }
+  }
+
+  async function handleTargetPositionUpdate(
+    job: ScheduledOrderJob,
+    enabled: boolean,
+    direction: TradeDirection,
+    targetSize: number,
+  ): Promise<boolean> {
+    setLoadingState((current) => ({ ...current, scheduleUpdate: true }));
+    setErrorMessage(null);
+
+    try {
+      const schedule = job.scheduleType === "repeating"
+        ? { type: "repeating" as const, runTime: job.runTime! }
+        : { type: "one-off" as const, runAt: job.runAt };
+      const response = await window.capitalApi.schedules.update({
+        jobId: job.id,
+        direction: job.direction,
+        size: job.size,
+        schedule,
+        protection: job.protection ?? null,
+        targetPosition: enabled
+          ? { enabled: true, direction, size: targetSize }
+          : { enabled: false },
+      });
+      setStatusMessage(response.result.message);
+      setBootstrap((current) => ({ ...current, schedules: response.schedules }));
+      clearScheduledOrderEditor();
+      void refreshConnectedData();
+      return true;
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      return false;
     } finally {
       setLoadingState((current) => ({ ...current, scheduleUpdate: false }));
     }
@@ -1151,6 +1189,7 @@ export default function App() {
                     onEditSubmit={handleScheduleUpdate}
                     onPause={(job) => handleSchedulePause(job.id)}
                     onReactivate={(job) => handleScheduleReactivate(job.id)}
+                    onTargetPositionSubmit={handleTargetPositionUpdate}
                     refs={scheduleOrderRefs}
                     schedules={bootstrap.schedules}
                   />

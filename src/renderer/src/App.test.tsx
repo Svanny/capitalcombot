@@ -328,6 +328,8 @@ describe("App", () => {
       });
     });
 
+    expect(await screen.findByRole("tab", { name: "Portfolio" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("link", { name: "Setup" }));
     await waitFor(() => {
       expect(screen.getByLabelText("Password")).toHaveValue("secret-pass");
       expect(screen.getByLabelText("API key")).toHaveValue("cap-api-key");
@@ -573,6 +575,8 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     expect(await screen.findByLabelText("Size")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Target position" })).toBeDisabled();
+    expect(screen.queryByRole("switch", { name: /Target position/i })).not.toBeInTheDocument();
     expect(screen.getByDisplayValue(toLocalDateTimeInput("2026-03-23T11:00:00.000Z"))).toBeInTheDocument();
     const buyRadio = screen.getByLabelText("Buy");
     expect(buyRadio).toBeChecked();
@@ -599,6 +603,126 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens the target-position popup from the scheduled-order tab row for an eligible pair", async () => {
+    const bootstrap: BootstrapState = {
+      ...connectedBootstrap,
+      schedules: [
+        {
+          ...connectedBootstrap.schedules[0],
+          scheduleType: "repeating",
+          runTime: "03:30",
+        },
+        {
+          ...connectedBootstrap.schedules[0],
+          id: "job-late",
+          direction: "SELL",
+          size: 4,
+          scheduleType: "repeating",
+          runTime: "05:30",
+          runAt: "2026-03-23T12:00:00.000Z",
+          status: "paused",
+        },
+      ],
+    };
+    const api = buildApi(bootstrap);
+    const updatedSchedules = bootstrap.schedules.map((job, index) => ({
+      ...job,
+      direction: index === 0 ? ("SELL" as const) : job.direction,
+      size: index === 0 ? 3 : job.size,
+      status: index === 1 ? ("paused" as const) : job.status,
+      targetPosition: {
+        pairId: "target-test",
+        leg: index === 0 ? ("early" as const) : ("late" as const),
+        direction: "SELL" as const,
+        size: 3,
+      },
+    }));
+    api.schedules.update = vi.fn(async () => ({
+      schedules: updatedSchedules,
+      result: {
+        action: "schedule" as const,
+        status: "success" as const,
+        message: "Updated scheduled order for Spot Gold.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+    api.schedules.list = vi.fn().mockResolvedValueOnce(bootstrap.schedules).mockResolvedValue(updatedSchedules);
+    window.capitalApi = api;
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    const targetButton = await screen.findByRole("button", { name: "Target position" });
+    expect(targetButton).toBeEnabled();
+    expect(targetButton.closest(".schedule-nav-row")).toContainElement(
+      screen.getByRole("tablist", { name: "Scheduled order status" }),
+    );
+    fireEvent.click(targetButton);
+
+    expect(screen.getByRole("dialog", { name: "Scheduled Target Position" })).toBeInTheDocument();
+    const targetSwitch = screen.getByRole("switch", { name: /Enable target position/i });
+    expect(targetSwitch).toBeEnabled();
+    fireEvent.click(targetSwitch);
+    expect(screen.getByLabelText("Target size")).toHaveValue(1);
+
+    fireEvent.click(screen.getByLabelText("Short"));
+    fireEvent.change(screen.getByLabelText("Target size"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(api.schedules.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: "job-1",
+          direction: "BUY",
+          size: 1,
+          protection: null,
+          targetPosition: { enabled: true, direction: "SELL", size: 3 },
+        }),
+      );
+    });
+    expect(screen.queryByRole("dialog", { name: "Scheduled Target Position" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(targetButton).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByText("3 Spot Gold")).toBeInTheDocument();
+      expect(screen.getAllByText("paused")[0].closest(".schedule-card")).toBeInTheDocument();
+    });
+  });
+
+  it("fills every credential field after using saved credentials", async () => {
+    const api = buildApi(disconnectedWithSavedBootstrap);
+    api.auth.connectSaved = vi.fn(async () => ({
+      state: {
+        ...connectedWithoutMarketBootstrap,
+        environment: "live" as const,
+      },
+      credentials: {
+        identifier: "saved@example.com",
+        password: "saved-password",
+        apiKey: "saved-api-key",
+        environment: "live" as const,
+      },
+      result: {
+        action: "auth" as const,
+        status: "success" as const,
+        message: "Connected with saved credentials.",
+        at: "2026-03-23T10:00:00.000Z",
+      },
+    }));
+    window.capitalApi = api;
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Setup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use saved" }));
+
+    expect(await screen.findByRole("tab", { name: "Portfolio" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("link", { name: "Setup" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Environment")).toHaveValue("live");
+      expect(screen.getByLabelText("Account identifier")).toHaveValue("saved@example.com");
+      expect(screen.getByLabelText("Password")).toHaveValue("saved-password");
+      expect(screen.getByLabelText("API key")).toHaveValue("saved-api-key");
     });
   });
 

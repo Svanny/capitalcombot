@@ -12,6 +12,7 @@ import type { ProtectionFieldName, ProtectionFormState } from "../../lib/protect
 import { formatDateTime, formatTime } from "../../lib/formatters";
 import { ProtectionStrategyFields } from "../../ui/ProtectionStrategyFields";
 import { WindowHelpButton } from "../../ui/WindowHelpButton";
+import { TargetPositionButton } from "./TargetPositionButton";
 
 type ScheduleTabId = "active" | "failed" | "cancelled";
 type SortDirection = "ascending" | "descending";
@@ -72,6 +73,12 @@ interface SchedulePanelProps {
   onEditSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onPause: (job: ScheduledOrderJob) => Promise<void>;
   onReactivate: (job: ScheduledOrderJob) => Promise<void>;
+  onTargetPositionSubmit: (
+    job: ScheduledOrderJob,
+    enabled: boolean,
+    direction: TradeDirection,
+    size: number,
+  ) => Promise<boolean>;
   refs: Pick<Record<OrderFieldName, RefObject<HTMLInputElement | null>>, "size" | "scheduleAt">;
   schedules: ScheduledOrderJob[];
 }
@@ -106,6 +113,7 @@ export function SchedulePanel({
   onEditSubmit,
   onPause,
   onReactivate,
+  onTargetPositionSubmit,
   refs,
   schedules,
 }: SchedulePanelProps) {
@@ -179,32 +187,39 @@ export function SchedulePanel({
         </div>
       </div>
       <div className="window-body section-window-body schedule-window-body">
-        <menu className="workspace-tabs schedule-tabs" role="tablist" aria-label="Scheduled order status">
-          {SCHEDULE_TAB_ORDER.map((tabId) => (
-            <li
-              key={tabId}
-              id={`schedule-tab-${tabId}`}
-              role="tab"
-              aria-controls={`schedule-panel-${tabId}`}
-              aria-selected={selectedTab === tabId}
-            >
-              <a
-                href={`#schedule-${tabId}`}
-                ref={(element) => {
-                  scheduleTabRefs.current[tabId] = element;
-                }}
-                tabIndex={selectedTab === tabId ? 0 : -1}
-                onClick={(event) => {
-                  event.preventDefault();
-                  setSelectedTab(tabId);
-                }}
-                onKeyDown={(event) => handleScheduleTabKeyDown(event, tabId)}
+        <div className="schedule-nav-row">
+          <menu className="workspace-tabs schedule-tabs" role="tablist" aria-label="Scheduled order status">
+            {SCHEDULE_TAB_ORDER.map((tabId) => (
+              <li
+                key={tabId}
+                id={`schedule-tab-${tabId}`}
+                role="tab"
+                aria-controls={`schedule-panel-${tabId}`}
+                aria-selected={selectedTab === tabId}
               >
-                {SCHEDULE_TAB_LABELS[tabId]} ({schedulesByTab[tabId].length})
-              </a>
-            </li>
-          ))}
-        </menu>
+                <a
+                  href={`#schedule-${tabId}`}
+                  ref={(element) => {
+                    scheduleTabRefs.current[tabId] = element;
+                  }}
+                  tabIndex={selectedTab === tabId ? 0 : -1}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setSelectedTab(tabId);
+                  }}
+                  onKeyDown={(event) => handleScheduleTabKeyDown(event, tabId)}
+                >
+                  {SCHEDULE_TAB_LABELS[tabId]} ({schedulesByTab[tabId].length})
+                </a>
+              </li>
+            ))}
+          </menu>
+          <TargetPositionButton
+            loading={loadingUpdate}
+            onSubmit={onTargetPositionSubmit}
+            schedules={schedules}
+          />
+        </div>
 
         <div
           id={`schedule-panel-${selectedTab}`}
@@ -279,6 +294,16 @@ export function SchedulePanel({
                   ) : null}
                   {isPaused || isCancelled ? (
                     <div className="inline-actions">
+                      {isPaused ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={loadingUpdate}
+                          onClick={() => onEdit(job)}
+                        >
+                          Edit
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="ghost"
@@ -304,7 +329,9 @@ export function SchedulePanel({
                       <div className="schedule-edit-grid">
                         <fieldset className="schedule-edit-section">
                           <legend>Order setup</legend>
-                          <p className="schedule-edit-note">Choose side and confirm position size.</p>
+                          <p className="schedule-edit-note">
+                            Choose side and confirm position size.
+                          </p>
 
                           <div className="schedule-radio-group" role="group" aria-label="Order direction">
                             <div className="schedule-radio-option">
@@ -331,7 +358,9 @@ export function SchedulePanel({
 
                           <div className={editErrors.size ? "field-shell has-error" : "field-shell"}>
                             <div className="field-row-stacked">
-                              <label htmlFor={`schedule-size-${job.id}`}>Size</label>
+                              <label htmlFor={`schedule-size-${job.id}`}>
+                                Size
+                              </label>
                               <input
                                 id={`schedule-size-${job.id}`}
                                 ref={refs.size}
