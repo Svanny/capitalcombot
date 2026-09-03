@@ -29,7 +29,7 @@ interface StoredEnvelope {
 }
 
 const DEFAULT_STATE: PersistedAppState = {
-  environment: "demo",
+  environment: "live",
   selectedMarket: null,
   schedules: [],
   executionLog: [],
@@ -292,7 +292,7 @@ function normalizePersistedState(state: PersistedAppState): PersistedAppState {
 }
 
 function parseTradingEnvironment(value: unknown): TradingEnvironment {
-  return value === "live" ? "live" : "demo";
+  return value === "demo" ? "demo" : "live";
 }
 
 function parseMarketSummary(value: unknown): MarketSummary | null {
@@ -356,12 +356,17 @@ function parseScheduledOrderJob(value: unknown): ScheduledOrderJob | null {
 
   const runTime = scheduleType === "repeating" ? parseRunTime(value.runTime) : undefined;
   const protection = parseProtectionStrategy(value.protection);
+  const targetPosition = parseScheduledTargetPosition(value.targetPosition);
 
   if (scheduleType === "repeating" && !runTime) {
     return null;
   }
 
   if (value.protection !== undefined && value.protection !== null && !protection) {
+    return null;
+  }
+
+  if (value.targetPosition !== undefined && value.targetPosition !== null && !targetPosition) {
     return null;
   }
 
@@ -382,7 +387,31 @@ function parseScheduledOrderJob(value: unknown): ScheduledOrderJob | null {
     lastOrderDealId: parseOptionalString(value.lastOrderDealId),
     protection,
     lastResolvedProtection: parseResolvedProtection(value.lastResolvedProtection),
+    targetPosition,
   };
+}
+
+function parseScheduledTargetPosition(
+  value: unknown,
+): ScheduledOrderJob["targetPosition"] {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const pairId = parseNonEmptyString(value.pairId);
+  const leg = value.leg === "early" || value.leg === "late" ? value.leg : null;
+  const direction = value.direction === "BUY" || value.direction === "SELL" ? value.direction : null;
+  const size = parsePositiveNumber(value.size);
+
+  if (!pairId || !leg || !direction || !size) {
+    return null;
+  }
+
+  return { pairId, leg, direction, size };
 }
 
 function parseScheduledStatus(value: unknown): ScheduledOrderJob["status"] | null {

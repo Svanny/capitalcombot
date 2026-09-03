@@ -4,9 +4,11 @@ import type {
   AppError,
   AuthResponse,
   BootstrapState,
+  CapitalAccountPreferences,
   CancelScheduledOrderResponse,
   CapitalCredentials,
   ClosePositionResponse,
+  ConnectSavedResponse,
   MarketSummary,
   OpenMarketOrderInput,
   OpenMarketOrderResponse,
@@ -20,6 +22,7 @@ import type {
   ReversePositionResponse,
   ScheduledOrderJob,
   ScheduledOrderUpdateInput,
+  ScheduledTargetPositionUpdate,
   UpdatePositionProtectionInput,
   UpdatePositionProtectionResponse,
   UpdateScheduledOrderResponse,
@@ -29,6 +32,7 @@ import type { CredentialStore } from "./security/credential-store";
 import { buildExecutionResult, type AppStateStore } from "./state/app-store";
 import { resolveProtection } from "./trading/protection";
 import type { ScheduledOrderInput, ScheduledOrderUpdateInput as SchedulerScheduledOrderUpdateInput } from "./trading/scheduler";
+import { aggregateSignedPosition } from "../shared/target-position";
 
 export interface TradingClientLike {
   connect(credentials: CapitalCredentials): Promise<void>;
@@ -39,6 +43,7 @@ export interface TradingClientLike {
   getQuote(epic: string): Promise<QuoteSnapshot>;
   getHistoricalPrices(epic: string, resolution: "MINUTE_15", max: number): Promise<import("./trading/protection").HistoricalPriceBar[]>;
   listPositions(): Promise<OpenPosition[]>;
+  getAccountPreferences(): Promise<CapitalAccountPreferences>;
   openMarketPosition(
     input: OpenMarketOrderInput,
     resolvedProtection?: import("../shared/types").ResolvedProtection | null,
@@ -197,7 +202,7 @@ export function createIpcHandlers({
 
     connect,
 
-    connectSaved: async (): Promise<AuthResponse> => {
+    connectSaved: async (): Promise<ConnectSavedResponse> => {
       const saved = await credentials.load();
 
       if (!saved) {
@@ -212,7 +217,11 @@ export function createIpcHandlers({
         `Reuse saved Capital.com credentials for ${saved.identifier} in the ${saved.environment} environment.`,
       );
 
-      return connect(saved);
+      const response = await connect(saved);
+      return {
+        ...response,
+        credentials: saved,
+      };
     },
 
     disconnect: async (): Promise<AuthResponse> => {
@@ -516,11 +525,31 @@ export function createIpcHandlers({
     updateSchedule: async (unsafeInput: unknown): Promise<UpdateScheduledOrderResponse> => {
       try {
         const input = validateScheduledOrderUpdateInput(unsafeInput);
-        await requireUserPresence(userPresence, "updateSchedule", `Update scheduled order ${input.jobId}.`);
+        let targetCurrentPosition: number | undefined;
+        if (input.targetPosition?.enabled) {
+          const preferences = await client.getAccountPreferences();
+          if (preferences.hedgingMode) {
+            throw createAppError(
+              "HEDGING_MODE_ENABLED",
+              "Disable Capital.com hedging mode before enabling target-position scheduling.",
+              true,
+            );
+          }
+          const targetJob = scheduler.list().find((job) => job.id === input.jobId);
+          if (!targetJob) {
+            throw createAppError("MISSING_SCHEDULE", "No scheduled order was found to update.", true);
+          }
+          targetCurrentPosition = aggregateSignedPosition(await client.listPositions(), targetJob.epic);
+        }
+        if (input.targetPosition === undefined) {
+          await requireUserPresence(userPresence, "updateSchedule", `Update scheduled order ${input.jobId}.`);
+        }
         const updated = scheduler.update(input.jobId, {
           direction: input.direction,
           size: input.size,
           protection: input.protection ?? null,
+          targetPosition: input.targetPosition,
+          targetCurrentPosition,
           ...input.schedule,
         });
         const result = buildExecutionResult(
@@ -622,6 +651,26 @@ function validateOpenMarketOrderInput(value: unknown): OpenMarketOrderInput {
   };
 }
 
+function validateScheduledTargetPositionUpdate(value: unknown): ScheduledTargetPositionUpdate | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const object = requireObject(value, "Enter a valid target-position setting.");
+  if (object.enabled === false) {
+    return { enabled: false };
+  }
+  if (object.enabled !== true) {
+    throw createAppError("INVALID_INPUT", "Choose a valid target-position setting.", true);
+  }
+
+  return {
+    enabled: true,
+    direction: validateTradeDirection(object.direction),
+    size: validatePositiveNumber(object.size, "Enter a target position size greater than 0."),
+  };
+}
+
 function validateProtectionPreviewInput(value: unknown): ProtectionPreviewInput {
   const object = requireObject(value, "Enter a valid protection preview request.");
 
@@ -641,6 +690,7 @@ function validateScheduledOrderUpdateInput(value: unknown): ScheduledOrderUpdate
     size: validatePositiveNumber(object.size, "Enter a trade size greater than 0."),
     schedule: validateRequiredScheduleRequest(object.schedule),
     protection: validateProtectionStrategy(object.protection, true),
+    targetPosition: validateScheduledTargetPositionUpdate(object.targetPosition),
   };
 }
 

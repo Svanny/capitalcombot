@@ -1,6 +1,7 @@
 export type TradingEnvironment = "demo" | "live";
 export type TradeDirection = "BUY" | "SELL";
 export type ScheduledOrderType = "one-off" | "repeating";
+export type TargetPositionLeg = "early" | "late";
 export type StopLossMode = "none" | "price_level" | "distance" | "adx_distance";
 export type TakeProfitMode = "none" | "price_level" | "distance" | "risk_reward" | "adx_distance";
 export type ScheduledOrderStatus =
@@ -109,6 +110,26 @@ export interface ScheduledOrderJob {
   lastOrderDealId?: string;
   protection?: ProtectionStrategy | null;
   lastResolvedProtection?: ResolvedProtection | null;
+  targetPosition?: ScheduledTargetPosition | null;
+}
+
+export interface ScheduledTargetPosition {
+  pairId: string;
+  leg: TargetPositionLeg;
+  direction: TradeDirection;
+  size: number;
+}
+
+export type ScheduledTargetPositionUpdate =
+  | { enabled: false }
+  | {
+      enabled: true;
+      direction: TradeDirection;
+      size: number;
+    };
+
+export interface CapitalAccountPreferences {
+  hedgingMode: boolean;
 }
 
 export interface ExecutionResult {
@@ -179,6 +200,7 @@ export interface ScheduledOrderUpdateInput {
   size: number;
   schedule: ScheduledOrderRequest;
   protection?: ProtectionStrategy | null;
+  targetPosition?: ScheduledTargetPositionUpdate;
 }
 
 export interface ProtectionPreviewInput {
@@ -216,6 +238,10 @@ export interface AuthResponse {
   result: ExecutionResult;
 }
 
+export interface ConnectSavedResponse extends AuthResponse {
+  credentials: CapitalCredentials;
+}
+
 export interface CancelScheduledOrderResponse {
   schedules: ScheduledOrderJob[];
   result: ExecutionResult;
@@ -251,7 +277,7 @@ export interface CapitalDesktopApi {
   };
   auth: {
     connect: (credentials: CapitalCredentials) => Promise<AuthResponse>;
-    connectSaved: () => Promise<AuthResponse>;
+    connectSaved: () => Promise<ConnectSavedResponse>;
     disconnect: () => Promise<AuthResponse>;
     forgetSaved: () => Promise<BootstrapState>;
   };

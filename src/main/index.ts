@@ -7,6 +7,7 @@ import { createCredentialStore } from "./security/credential-store";
 import { buildExecutionResult, createAppStateStore } from "./state/app-store";
 import { resolveProtection } from "./trading/protection";
 import { ScheduledOrderScheduler } from "./trading/scheduler";
+import { executeTargetPositionJob } from "./trading/target-position-execution";
 
 const client = new CapitalClient();
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
@@ -52,6 +53,10 @@ app.whenReady().then(async () => {
   const store = appStateBootstrap.store;
   const credentials = await createCredentialStore();
   const scheduler = new ScheduledOrderScheduler(store, async (job) => {
+    if (job.targetPosition) {
+      return executeTargetPositionJob(client, job);
+    }
+
     const resolvedProtection = job.protection
       ? await resolveProtection(client, {
           epic: job.epic,

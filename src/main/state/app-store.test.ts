@@ -22,6 +22,10 @@ describe("buildExecutionResult", () => {
 });
 
 describe("MemoryAppStateStore", () => {
+  it("defaults fresh state to the live environment", () => {
+    expect(new MemoryAppStateStore().getState().environment).toBe("live");
+  });
+
   it("filters out legacy close-schedule entries that do not match the current order schedule shape", () => {
     const store = new MemoryAppStateStore();
     store.patchState({
@@ -91,6 +95,72 @@ describe("MemoryAppStateStore", () => {
       status: "paused",
       reason: "Paused manually",
     });
+  });
+
+  it("round-trips valid target-position metadata and keeps legacy schedules compatible", () => {
+    const store = new MemoryAppStateStore();
+    store.patchState({
+      schedules: [
+        {
+          id: "target-job",
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-24T06:00:00.000Z",
+          status: "scheduled",
+          createdAt: "2026-03-24T05:00:00.000Z",
+          targetPosition: {
+            pairId: "pair-1",
+            leg: "early",
+            direction: "SELL",
+            size: 2,
+          },
+        },
+        {
+          id: "legacy-job",
+          epic: "SILVER",
+          instrumentName: "Silver",
+          direction: "SELL",
+          size: 1,
+          scheduleType: "one-off",
+          runAt: "2026-03-24T07:00:00.000Z",
+          status: "scheduled",
+          createdAt: "2026-03-24T05:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(store.getState().schedules[0].targetPosition).toEqual({
+      pairId: "pair-1",
+      leg: "early",
+      direction: "SELL",
+      size: 2,
+    });
+    expect(store.getState().schedules[1].targetPosition).toBeNull();
+  });
+
+  it("drops schedules with malformed target-position metadata instead of executing the fixed payload", () => {
+    const store = new MemoryAppStateStore();
+    store.patchState({
+      schedules: [
+        {
+          id: "unsafe-target-job",
+          epic: "XAUUSD",
+          instrumentName: "Spot Gold",
+          direction: "BUY",
+          size: 20,
+          scheduleType: "one-off",
+          runAt: "2026-03-24T06:00:00.000Z",
+          status: "scheduled",
+          createdAt: "2026-03-24T05:00:00.000Z",
+          targetPosition: { pairId: "pair-1", leg: "early", direction: "SELL", size: -1 },
+        } as never,
+      ],
+    });
+
+    expect(store.getState().schedules).toEqual([]);
   });
 
   it("filters out schedules with unknown statuses", () => {

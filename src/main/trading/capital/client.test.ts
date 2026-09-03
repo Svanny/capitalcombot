@@ -32,6 +32,36 @@ describe("CapitalClient", () => {
     });
   });
 
+  it("reads and validates the account hedging preference", async () => {
+    const responses = [
+      new Response("{}", {
+        status: 200,
+        headers: { CST: "session-cst", "X-SECURITY-TOKEN": "security-token" },
+      }),
+      new Response(JSON.stringify({ hedgingMode: false }), { status: 200 }),
+    ];
+    const fetchMock = vi.fn(async () => responses.shift() ?? new Response("{}", { status: 500 }));
+    const client = new CapitalClient(fetchMock as typeof fetch);
+    await client.connect({
+      identifier: "trader@example.com",
+      password: "secret",
+      apiKey: "api-key",
+      environment: "live",
+    });
+
+    await expect(client.getAccountPreferences()).resolves.toEqual({ hedgingMode: false });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("/api/v1/accounts/preferences"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          CST: "session-cst",
+          "X-SECURITY-TOKEN": "security-token",
+        }),
+      }),
+    );
+  });
+
   it("creates and closes a position by following Capital.com deal confirmations", async () => {
     const responses = [
       new Response("{}", {

@@ -5,8 +5,15 @@ import type {
   ResolvedProtection,
   ScheduledOrderJob,
   ScheduledOrderRequest,
+  ScheduledTargetPositionUpdate,
 } from "../../shared/types";
-import { createAppError } from "./capital/client";
+import {
+  getTargetPairEligibility,
+  orderTargetPairJobs,
+  planTargetTransition,
+  type TargetTransitionPlan,
+} from "../../shared/target-position";
+import { createAppError, normalizeError } from "./capital/client";
 import { buildExecutionResult, type AppStateStore } from "../state/app-store";
 
 export type ScheduledOrderInput = ScheduledOrderRequest & {
@@ -21,6 +28,8 @@ export type ScheduledOrderUpdateInput = ScheduledOrderRequest & {
   direction: "BUY" | "SELL";
   size: number;
   protection?: ProtectionStrategy | null;
+  targetPosition?: ScheduledTargetPositionUpdate;
+  targetCurrentPosition?: number;
 };
 
 export interface SchedulerClock {
@@ -32,6 +41,7 @@ export interface SchedulerClock {
 export interface ScheduledExecutionResult {
   position: OpenPosition | null;
   resolvedProtection: ResolvedProtection | null;
+  reason?: string;
 }
 
 export interface RestoreOptions {
@@ -43,6 +53,8 @@ const systemClock: SchedulerClock = {
   setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
   clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
+
+const TARGET_NO_ORDER_PAUSE_PREFIX = "Paused because this target-position leg needs no order:";
 
 export class ScheduledOrderScheduler {
   private readonly timers = new Map<string, unknown>();
@@ -91,6 +103,15 @@ export class ScheduledOrderScheduler {
   }
 
   cancel(jobId: string, reason = "Cancelled manually"): ScheduledOrderJob[] {
+    const current = this.list().find((job) => job.id === jobId);
+    if (current?.targetPosition) {
+      throw createAppError(
+        "INVALID_SCHEDULE_STATE",
+        "Disable target-position mode before cancelling either paired order.",
+        true,
+      );
+    }
+
     const nextSchedules = this.list().map((job) => {
       if (job.id !== jobId || job.status !== "scheduled") {
         return job;
@@ -211,28 +232,140 @@ export class ScheduledOrderScheduler {
       throw createAppError("MISSING_SCHEDULE", "No scheduled order was found to update.", true);
     }
 
-    if (current.status !== "scheduled") {
+    if (current.status !== "scheduled" && current.status !== "paused") {
       throw createAppError(
         "INVALID_SCHEDULE_STATE",
-        "Only pending scheduled orders can be edited.",
+        "Only scheduled or paused orders can be edited.",
         true,
       );
     }
 
     const scheduledAt = resolveInitialRunAt(input, this.clock.now());
-    const nextJob: ScheduledOrderJob = {
+    const editedJob: ScheduledOrderJob = {
       ...current,
-      direction: input.direction,
-      size: input.size,
       scheduleType: input.type,
       runAt: scheduledAt.toISOString(),
       runTime: input.type === "repeating" ? input.runTime : undefined,
-      protection: input.protection ?? null,
       reason: undefined,
     };
 
-    this.replaceJob(nextJob);
-    this.arm(nextJob);
+    const targetPositionUpdate = input.targetPosition;
+    if (targetPositionUpdate?.enabled) {
+      if (!Number.isFinite(input.targetCurrentPosition)) {
+        throw createAppError(
+          "TARGET_POSITION_UNAVAILABLE",
+          "The live position could not be confirmed before updating the target-position pair.",
+          true,
+        );
+      }
+      const candidateSchedules = this.list().map((job) => (job.id === jobId ? editedJob : job));
+      const eligibility = getTargetPairEligibility(candidateSchedules, current.epic);
+      if (!eligibility.eligible) {
+        throw createAppError(
+          "INVALID_TARGET_POSITION_PAIR",
+          eligibility.reason ?? "The target-position pair is invalid.",
+          true,
+        );
+      }
+
+      const existingPairIds = new Set(
+        eligibility.jobs.map((job) => job.targetPosition?.pairId).filter(Boolean),
+      );
+      const pairId = existingPairIds.size === 1
+        ? ([...existingPairIds][0] as string)
+        : `target_${randomUUID()}`;
+      const pairJobIds = new Set(eligibility.jobs.map((job) => job.id));
+      const jobsByTime = alignRepeatingTargetCycle(orderTargetPairJobs(eligibility.jobs));
+      let projectedPosition = input.targetCurrentPosition!;
+      const plannedJobs = new Map<string, ScheduledOrderJob>();
+      jobsByTime.forEach((job, index) => {
+        const leg = index === 0 ? "early" : "late";
+        const plan = planTargetTransition({
+          currentPosition: projectedPosition,
+          targetDirection: targetPositionUpdate.direction,
+          targetSize: targetPositionUpdate.size,
+          leg,
+          executionTime: new Date(job.runAt),
+        });
+        plannedJobs.set(
+          job.id,
+          createTargetPairJob(job, pairId, leg, targetPositionUpdate.direction, targetPositionUpdate.size, plan),
+        );
+        if (plan.kind === "order") {
+          projectedPosition += plan.direction === "BUY" ? plan.size : -plan.size;
+        }
+      });
+      const nextSchedules = candidateSchedules.map((job) =>
+        pairJobIds.has(job.id) ? plannedJobs.get(job.id)! : job,
+      );
+
+      this.replaceJobs(nextSchedules, pairJobIds);
+      return nextSchedules.find((job) => job.id === jobId)!;
+    }
+
+    if (current.targetPosition && targetPositionUpdate === undefined) {
+      const fixedEdit = {
+        ...editedJob,
+        direction: input.direction,
+        size: input.size,
+        protection: input.protection ?? null,
+      };
+      const candidateSchedules = this.list().map((job) => (job.id === jobId ? fixedEdit : job));
+      const eligibility = getTargetPairEligibility(candidateSchedules, current.epic);
+      const pairId = current.targetPosition.pairId;
+      if (
+        !eligibility.eligible ||
+        !eligibility.jobs.every((job) => job.targetPosition?.pairId === pairId)
+      ) {
+        throw createAppError(
+          "INVALID_TARGET_POSITION_PAIR",
+          eligibility.reason ?? "Disable target-position mode before changing the pair structure.",
+          true,
+        );
+      }
+
+      const jobsByTime = orderTargetPairJobs(eligibility.jobs);
+      const legById = new Map(
+        jobsByTime.map((job, index) => [job.id, index === 0 ? "early" : "late"] as const),
+      );
+      const affectedIds = new Set(eligibility.jobs.map((job) => job.id));
+      const nextSchedules = candidateSchedules.map((job) =>
+        affectedIds.has(job.id)
+          ? {
+              ...job,
+              targetPosition: {
+                ...current.targetPosition!,
+                leg: legById.get(job.id)!,
+              },
+            }
+          : job,
+      );
+
+      this.replaceJobs(nextSchedules, affectedIds);
+      return nextSchedules.find((job) => job.id === jobId)!;
+    }
+
+    const pairId = current.targetPosition?.pairId;
+    const nextJob: ScheduledOrderJob = {
+      ...editedJob,
+      direction: input.direction,
+      size: input.size,
+      protection: input.protection ?? null,
+      targetPosition: null,
+    };
+    const affectedIds = new Set<string>([jobId]);
+    const nextSchedules = this.list().map((job) => {
+      if (job.id === jobId) {
+        return nextJob;
+      }
+      if (pairId && job.targetPosition?.pairId === pairId) {
+        affectedIds.add(job.id);
+        return { ...job, targetPosition: null };
+      }
+      return job;
+    });
+
+    this.replaceJobs(nextSchedules, affectedIds);
     return nextJob;
   }
 
@@ -322,7 +455,7 @@ export class ScheduledOrderScheduler {
     this.replaceJob(executing);
 
     try {
-      const { position, resolvedProtection } = await this.placeOrder(executing);
+      const { position, resolvedProtection, reason } = await this.placeOrder(executing);
 
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());
@@ -333,7 +466,7 @@ export class ScheduledOrderScheduler {
           lastError: undefined,
           lastOrderDealId: position?.dealId,
           lastResolvedProtection: resolvedProtection,
-          reason: "Market order placed. Next repeating run scheduled.",
+          reason: reason ?? "Market order placed. Next repeating run scheduled.",
         };
         this.replaceJob(rescheduledJob);
         this.arm(rescheduledJob);
@@ -344,7 +477,7 @@ export class ScheduledOrderScheduler {
           lastError: undefined,
           lastOrderDealId: position?.dealId,
           lastResolvedProtection: resolvedProtection,
-          reason: "Market order placed automatically at the scheduled time.",
+          reason: reason ?? "Market order placed automatically at the scheduled time.",
         });
       }
 
@@ -352,12 +485,12 @@ export class ScheduledOrderScheduler {
         buildExecutionResult(
           "schedule",
           "success",
-          `Scheduled ${executing.direction} order placed for ${executing.instrumentName}.`,
+          reason ?? `Scheduled ${executing.direction} order placed for ${executing.instrumentName}.`,
           position ? `Deal ${position.dealId}` : undefined,
         ),
       );
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "Unknown scheduler error.";
+      const detail = normalizeError(error).message;
 
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());
@@ -404,10 +537,73 @@ export class ScheduledOrderScheduler {
       .sort(sortJobs);
     this.store.setSchedules(nextSchedules);
   }
+
+  private replaceJobs(nextSchedules: ScheduledOrderJob[], affectedIds: Set<string>): void {
+    affectedIds.forEach((jobId) => this.disarm(jobId));
+    const sortedSchedules = nextSchedules.slice().sort(sortJobs);
+    this.store.setSchedules(sortedSchedules);
+    sortedSchedules
+      .filter((job) => affectedIds.has(job.id) && job.status === "scheduled")
+      .forEach((job) => this.arm(job));
+  }
 }
 
 function sortJobs(left: ScheduledOrderJob, right: ScheduledOrderJob): number {
   return new Date(left.runAt).getTime() - new Date(right.runAt).getTime();
+}
+
+function alignRepeatingTargetCycle(jobs: ScheduledOrderJob[]): ScheduledOrderJob[] {
+  if (jobs.length !== 2 || jobs.some((job) => job.scheduleType !== "repeating" || !job.runTime)) {
+    return jobs;
+  }
+
+  const cycleDate = new Date(jobs[0].runAt);
+  return jobs.map((job) => {
+    const [hours, minutes] = job.runTime!.split(":").map(Number);
+    const alignedRun = new Date(cycleDate);
+    alignedRun.setHours(hours, minutes, 0, 0);
+    return { ...job, runAt: alignedRun.toISOString() };
+  });
+}
+
+function createTargetPairJob(
+  job: ScheduledOrderJob,
+  pairId: string,
+  leg: "early" | "late",
+  direction: "BUY" | "SELL",
+  size: number,
+  plan: TargetTransitionPlan,
+): ScheduledOrderJob {
+  const wasAutomaticallyPaused =
+    job.status === "paused" && job.reason?.startsWith(TARGET_NO_ORDER_PAUSE_PREFIX);
+  const isStructurallyUnusedLateLeg = direction === "SELL" && leg === "late";
+  const isTerminalOneOffSkip =
+    job.scheduleType === "one-off" &&
+    plan.kind === "noop" &&
+    (plan.reason.startsWith("Saturday late") || plan.reason.startsWith("Weekend"));
+  const pauseUnusedLeg =
+    plan.kind === "noop" &&
+    job.status === "scheduled" &&
+    (isStructurallyUnusedLateLeg || isTerminalOneOffSkip);
+  const resumeNeededLeg = plan.kind === "order" && wasAutomaticallyPaused;
+
+  return {
+    ...job,
+    direction: plan.kind === "order" ? plan.direction : job.direction,
+    size: plan.kind === "order" ? plan.size : job.size,
+    status: pauseUnusedLeg ? "paused" : resumeNeededLeg ? "scheduled" : job.status,
+    reason: pauseUnusedLeg
+      ? `${TARGET_NO_ORDER_PAUSE_PREFIX} ${plan.reason}`
+      : resumeNeededLeg
+        ? undefined
+        : job.reason,
+    targetPosition: {
+      pairId,
+      leg,
+      direction,
+      size,
+    },
+  };
 }
 
 function buildScheduleId(): string {

@@ -102,6 +102,7 @@ function createMockClient(): TradingClientLike {
         at: new Date(Date.parse("2026-03-23T10:00:00.000Z") + index * 900_000).toISOString(),
       })),
     ),
+    getAccountPreferences: vi.fn(async () => ({ hedgingMode: false })),
     listPositions: vi.fn(async () => [] satisfies OpenPosition[]),
     openMarketPosition: vi.fn(async () => buildOpenPosition()),
     closePosition: vi.fn(async () => undefined),
@@ -194,6 +195,14 @@ function createMockScheduler(): SchedulerLike {
         runAt: input.type === "one-off" ? input.runAt : "2026-03-23T14:30:00.000Z",
         runTime: input.type === "repeating" ? input.runTime : undefined,
         protection: input.protection ?? null,
+        targetPosition: input.targetPosition?.enabled
+          ? {
+              pairId: "pair-1",
+              leg: "early",
+              direction: input.targetPosition.direction,
+              size: input.targetPosition.size,
+            }
+          : null,
         reason: undefined,
       };
       const index = schedules.findIndex((job) => job.id === jobId);
@@ -479,6 +488,78 @@ describe("createIpcHandlers", () => {
     );
   });
 
+  it("blocks target-position activation when broker hedging mode is enabled", async () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = createMockScheduler();
+    await scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T11:00:00.000Z",
+    });
+    const client = createMockClient();
+    vi.mocked(client.getAccountPreferences).mockResolvedValue({ hedgingMode: true });
+    const handlers = createIpcHandlers({
+      client,
+      store,
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+    });
+
+    await expect(
+      handlers.updateSchedule({
+        jobId: "schedule_XAUUSD",
+        direction: "SELL",
+        size: 2,
+        schedule: { type: "one-off", runAt: "2026-03-23T11:00:00.000Z" },
+        protection: null,
+        targetPosition: { enabled: true, direction: "SELL", size: 2 },
+      }),
+    ).rejects.toThrow(/HEDGING_MODE_ENABLED/);
+    expect(scheduler.update).not.toHaveBeenCalled();
+  });
+
+  it("uses live exposure and skips confirmation when saving target-position changes", async () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = createMockScheduler();
+    await scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "03:30",
+    });
+    const client = createMockClient();
+    vi.mocked(client.listPositions).mockResolvedValue([buildOpenPosition({ direction: "BUY", size: 1 })]);
+    const userPresence = { confirm: vi.fn(async () => false) };
+    const handlers = createIpcHandlers({
+      client,
+      store,
+      credentials: new MemoryCredentialStore(),
+      scheduler,
+      userPresence,
+    });
+
+    await handlers.updateSchedule({
+      jobId: "schedule_XAUUSD",
+      direction: "BUY",
+      size: 1,
+      schedule: { type: "repeating", runTime: "03:30" },
+      protection: null,
+      targetPosition: { enabled: true, direction: "BUY", size: 1 },
+    });
+
+    expect(userPresence.confirm).not.toHaveBeenCalled();
+    expect(client.listPositions).toHaveBeenCalledTimes(1);
+    expect(scheduler.update).toHaveBeenCalledWith(
+      "schedule_XAUUSD",
+      expect.objectContaining({ targetCurrentPosition: 1 }),
+    );
+  });
+
   it("previews protection in the main process", async () => {
     const handlers = createIpcHandlers({
       client: createMockClient(),
@@ -622,6 +703,29 @@ describe("createIpcHandlers", () => {
     await expect(handlers.connectSaved()).rejects.toThrow(/Confirm the Capital.com action/);
 
     expect(client.connect).not.toHaveBeenCalled();
+  });
+
+  it("returns saved credentials only from the explicit connect-saved action", async () => {
+    const credentials = new MemoryCredentialStore();
+    const saved: CapitalCredentials = {
+      identifier: "saved@example.com",
+      password: "saved-password",
+      apiKey: "saved-api-key",
+      environment: "live",
+    };
+    await credentials.save(saved);
+    const handlers = createIpcHandlers({
+      client: createMockClient(),
+      store: new MemoryAppStateStore(),
+      credentials,
+      scheduler: createMockScheduler(),
+    });
+
+    const bootstrap = await handlers.bootstrap();
+    const response = await handlers.connectSaved();
+
+    expect(bootstrap).not.toHaveProperty("credentials");
+    expect(response.credentials).toEqual(saved);
   });
 
   it("requires main-process user presence before pausing or reactivating schedules", async () => {

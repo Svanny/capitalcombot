@@ -752,7 +752,7 @@ describe("ScheduledOrderScheduler", () => {
         runTime: "10:30",
         protection: null,
       }),
-    ).toThrow(/pending scheduled orders/i);
+    ).toThrow(/scheduled or paused orders/i);
 
     expect(() =>
       scheduler.update("missing", {
@@ -763,5 +763,400 @@ describe("ScheduledOrderScheduler", () => {
         protection: null,
       }),
     ).toThrow(/No scheduled order/i);
+  });
+
+  it("atomically enables a target pair and preserves scheduled and paused timer state", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({ position: null, resolvedProtection: null }));
+    const clock = new FakeClock();
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    const late = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 4,
+      type: "one-off",
+      runAt: "2026-03-23T11:30:00.000Z",
+    });
+    scheduler.pause(late.id);
+
+    scheduler.update(early.id, {
+      direction: "SELL",
+      size: 3,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+      protection: null,
+      targetPosition: { enabled: true, direction: "SELL", size: 3 },
+      targetCurrentPosition: 0,
+    });
+
+    const [storedEarly, storedLate] = scheduler.list();
+    expect(storedEarly).toMatchObject({
+      id: early.id,
+      direction: "SELL",
+      size: 3,
+      status: "scheduled",
+      targetPosition: { leg: "early", direction: "SELL", size: 3 },
+    });
+    expect(storedLate).toMatchObject({
+      id: late.id,
+      direction: "SELL",
+      size: 4,
+      status: "paused",
+      targetPosition: { leg: "late", direction: "SELL", size: 3 },
+    });
+    expect(storedEarly.targetPosition?.pairId).toBe(storedLate.targetPosition?.pairId);
+
+    await clock.advanceTo("2026-03-23T11:31:00.000Z");
+    expect(placeSpy).toHaveBeenCalledTimes(1);
+    expect(placeSpy).toHaveBeenCalledWith(expect.objectContaining({ id: early.id }));
+  });
+
+  it("materializes a long-one target as SELL 1 early and BUY 1 late from a live long-one position", () => {
+    const scheduler = new ScheduledOrderScheduler(
+      new MemoryAppStateStore(),
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "03:30",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "05:30",
+    });
+
+    scheduler.update(early.id, {
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "03:30",
+      targetPosition: { enabled: true, direction: "BUY", size: 1 },
+      targetCurrentPosition: 1,
+    });
+
+    expect(scheduler.list()).toEqual([
+      expect.objectContaining({ direction: "SELL", size: 1, runTime: "03:30", status: "scheduled" }),
+      expect.objectContaining({ direction: "BUY", size: 1, runTime: "05:30", status: "scheduled" }),
+    ]);
+  });
+
+  it.each([
+    [1, "SELL", 1, "SELL", 2, "paused"],
+    [-2, "SELL", 1, "BUY", 1, "paused"],
+    [-0.5, "SELL", 1, "SELL", 0.5, "paused"],
+    [0, "SELL", 1, "SELL", 1, "paused"],
+    [2, "BUY", 1, "SELL", 2, "scheduled"],
+    [-2, "BUY", 1, "BUY", 2, "scheduled"],
+  ] as const)(
+    "materializes live position %s toward %s %s as early %s %s with late leg %s",
+    (currentPosition, targetDirection, targetSize, earlyDirection, earlySize, lateStatus) => {
+      const scheduler = new ScheduledOrderScheduler(
+        new MemoryAppStateStore(),
+        async () => ({ position: null, resolvedProtection: null }),
+        new FakeClock(),
+      );
+      const early = scheduler.schedule({
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 7,
+        type: "repeating",
+        runTime: "03:30",
+      });
+      scheduler.schedule({
+        epic: "XAUUSD",
+        instrumentName: "Spot Gold",
+        direction: "BUY",
+        size: 7,
+        type: "repeating",
+        runTime: "05:30",
+      });
+
+      scheduler.update(early.id, {
+        direction: "BUY",
+        size: 7,
+        type: "repeating",
+        runTime: "03:30",
+        targetPosition: { enabled: true, direction: targetDirection, size: targetSize },
+        targetCurrentPosition: currentPosition,
+      });
+
+      const [storedEarly, storedLate] = scheduler.list();
+      expect(storedEarly).toMatchObject({
+        direction: earlyDirection,
+        size: earlySize,
+        runTime: "03:30",
+        status: "scheduled",
+        targetPosition: { leg: "early", direction: targetDirection, size: targetSize },
+      });
+      expect(storedLate).toMatchObject({
+        runTime: "05:30",
+        status: lateStatus,
+        targetPosition: { leg: "late", direction: targetDirection, size: targetSize },
+      });
+      if (targetDirection === "BUY") {
+        expect(storedLate).toMatchObject({ direction: "BUY", size: targetSize });
+      }
+    },
+  );
+
+  it("keeps 03:30 as the early leg when saved between the two repeating times", () => {
+    const clock = new FakeClock(new Date(2026, 2, 23, 4, 0).getTime());
+    const scheduler = new ScheduledOrderScheduler(
+      new MemoryAppStateStore(),
+      async () => ({ position: null, resolvedProtection: null }),
+      clock,
+    );
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "03:30",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "05:30",
+    });
+
+    scheduler.update(early.id, {
+      direction: "BUY",
+      size: 7,
+      type: "repeating",
+      runTime: "03:30",
+      targetPosition: { enabled: true, direction: "SELL", size: 1 },
+      targetCurrentPosition: 1,
+    });
+
+    const [storedEarly, storedLate] = scheduler.list();
+    expect(storedEarly).toMatchObject({ runTime: "03:30", direction: "SELL", size: 2 });
+    expect(storedLate).toMatchObject({ runTime: "05:30", status: "paused" });
+    expect(new Date(storedEarly.runAt).toDateString()).toBe(new Date(storedLate.runAt).toDateString());
+  });
+
+  it("edits a paused fixed order without arming it", async () => {
+    const store = new MemoryAppStateStore();
+    const placeSpy = vi.fn(async () => ({ position: null, resolvedProtection: null }));
+    const clock = new FakeClock();
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+    const job = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    scheduler.pause(job.id);
+
+    const updated = scheduler.update(job.id, {
+      direction: "SELL",
+      size: 2,
+      type: "one-off",
+      runAt: "2026-03-23T11:30:00.000Z",
+      protection: null,
+      targetPosition: { enabled: false },
+    });
+
+    expect(updated).toMatchObject({ status: "paused", direction: "SELL", size: 2 });
+    await clock.advanceTo("2026-03-23T12:00:00.000Z");
+    expect(placeSpy).not.toHaveBeenCalled();
+  });
+
+  it("disables both pair legs while retaining their most recent concrete orders", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 4,
+      type: "one-off",
+      runAt: "2026-03-23T11:30:00.000Z",
+    });
+    scheduler.update(early.id, {
+      direction: "BUY",
+      size: 3,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+      targetPosition: { enabled: true, direction: "BUY", size: 3 },
+      targetCurrentPosition: 1,
+    });
+
+    scheduler.update(early.id, {
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+      protection: null,
+      targetPosition: { enabled: false },
+    });
+
+    expect(scheduler.list().map((job) => job.targetPosition)).toEqual([null, null]);
+    expect(scheduler.list().map(({ direction, size }) => ({ direction, size }))).toEqual([
+      { direction: "BUY", size: 1 },
+      { direction: "BUY", size: 3 },
+    ]);
+  });
+
+  it("preserves active pair metadata when editing a leg's stored fixed order", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "03:30",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 4,
+      type: "repeating",
+      runTime: "05:30",
+    });
+    scheduler.update(early.id, {
+      direction: "BUY",
+      size: 1,
+      type: "repeating",
+      runTime: "03:30",
+      targetPosition: { enabled: true, direction: "SELL", size: 3 },
+      targetCurrentPosition: 0,
+    });
+
+    scheduler.update(early.id, {
+      direction: "SELL",
+      size: 2,
+      type: "repeating",
+      runTime: "03:45",
+      protection: null,
+    });
+
+    const [storedEarly, storedLate] = scheduler.list();
+    expect(storedEarly).toMatchObject({
+      direction: "SELL",
+      size: 2,
+      runTime: "03:45",
+      targetPosition: { leg: "early", direction: "SELL", size: 3 },
+    });
+    expect(storedLate).toMatchObject({
+      direction: "SELL",
+      size: 4,
+      status: "paused",
+      reason: expect.stringContaining("needs no order"),
+      targetPosition: { leg: "late", direction: "SELL", size: 3 },
+    });
+    expect(storedEarly.targetPosition?.pairId).toBe(storedLate.targetPosition?.pairId);
+
+    scheduler.update(early.id, {
+      direction: "SELL",
+      size: 2,
+      type: "repeating",
+      runTime: "03:45",
+      targetPosition: { enabled: true, direction: "BUY", size: 3 },
+      targetCurrentPosition: 1,
+    });
+    expect(scheduler.list()[1]).toMatchObject({
+      status: "scheduled",
+      targetPosition: { leg: "late", direction: "BUY", size: 3 },
+    });
+    expect(scheduler.list()[1].reason).toBeUndefined();
+  });
+
+  it("rejects an invalid target pair and blocks cancelling an active pair leg", () => {
+    const store = new MemoryAppStateStore();
+    const scheduler = new ScheduledOrderScheduler(
+      store,
+      async () => ({ position: null, resolvedProtection: null }),
+      new FakeClock(),
+    );
+    const early = scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "BUY",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T11:30:00.000Z",
+    });
+    scheduler.schedule({
+      epic: "XAUUSD",
+      instrumentName: "Spot Gold",
+      direction: "SELL",
+      size: 1,
+      type: "one-off",
+      runAt: "2026-03-23T12:30:00.000Z",
+    });
+
+    expect(() =>
+      scheduler.update(early.id, {
+        direction: "SELL",
+        size: 2,
+        type: "one-off",
+        runAt: "2026-03-23T10:30:00.000Z",
+        targetPosition: { enabled: true, direction: "SELL", size: 2 },
+        targetCurrentPosition: 0,
+      }),
+    ).toThrow(/exactly two/i);
+
+    scheduler.cancel(scheduler.list()[2].id);
+    scheduler.update(early.id, {
+      direction: "SELL",
+      size: 2,
+      type: "one-off",
+      runAt: "2026-03-23T10:30:00.000Z",
+      targetPosition: { enabled: true, direction: "SELL", size: 2 },
+      targetCurrentPosition: 0,
+    });
+    expect(() => scheduler.cancel(early.id)).toThrow(/Disable target-position mode/i);
   });
 });

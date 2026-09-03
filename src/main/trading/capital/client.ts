@@ -1,4 +1,5 @@
 import type {
+  CapitalAccountPreferences,
   AppError,
   CapitalCredentials,
   MarketSummary,
@@ -210,6 +211,21 @@ export class CapitalClient {
     const response = await this.authorizedJson<PositionsResponse>("/api/v1/positions");
 
     return (response.positions ?? []).map(({ position, market }) => mapOpenPosition(position, market));
+  }
+
+  async getAccountPreferences(): Promise<CapitalAccountPreferences> {
+    const response = await this.authorizedJson<{ hedgingMode?: unknown }>(
+      "/api/v1/accounts/preferences",
+    );
+
+    if (typeof response.hedgingMode !== "boolean") {
+      throw createAppError(
+        "ACCOUNT_PREFERENCES_INVALID",
+        "Capital.com did not return a valid hedging-mode preference.",
+      );
+    }
+
+    return { hedgingMode: response.hedgingMode };
   }
 
   async getHistoricalPrices(
