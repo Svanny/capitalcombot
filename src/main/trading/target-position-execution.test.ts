@@ -53,6 +53,60 @@ function client(overrides: Partial<TargetPositionExecutionClient> = {}): TargetP
 }
 
 describe("executeTargetPositionJob", () => {
+  it.each([0, -0.5, 2])("targets short 1.33 on Saturday late using live exposure %s", async (exposure) => {
+    const mock = client({
+      listPositions: vi.fn(async (): Promise<OpenPosition[]> => exposure === 0 ? [] : [{
+        ...openPosition(), direction: exposure > 0 ? "BUY" : "SELL", size: Math.abs(exposure),
+      }]),
+    });
+    await executeTargetPositionJob(mock, {
+      ...job(), targetPosition: { ...job().targetPosition!, leg: "late", size: 1.33 },
+    }, new Date(2026, 8, 5, 5, 30));
+    expect(mock.openMarketPosition).toHaveBeenCalledWith({
+      epic: "XAUUSD", direction: "SELL", size: Number((1.33 + exposure).toFixed(10)), protection: null,
+    });
+  });
+
+  it.each([
+    [2, "BUY", 1], [-2, "BUY", 1], [0, "BUY", 1],
+    [2, "SELL", 1], [-2, "SELL", 1], [-0.5, "SELL", 1], [0, "SELL", 1], [-1, "SELL", 1],
+  ] as const)("reaches target %s -> %s %s from live exposure after both legs", async (initial, direction, size) => {
+    let exposure = initial as number;
+    const mock = client({
+      listPositions: vi.fn(async (): Promise<OpenPosition[]> => exposure === 0 ? [] : [{
+        ...openPosition(), direction: exposure > 0 ? "BUY" : "SELL", size: Math.abs(exposure),
+      }]),
+      openMarketPosition: vi.fn(async (input) => {
+        exposure += input.direction === "BUY" ? input.size : -input.size;
+        return null;
+      }),
+    });
+    const early = { ...job(), targetPosition: { ...job().targetPosition!, direction, size } };
+    await executeTargetPositionJob(mock, early, new Date(2026, 8, 4, 3, 30));
+    if (direction === "BUY") expect(exposure).toBe(0);
+    await executeTargetPositionJob(mock, {
+      ...early, targetPosition: { ...early.targetPosition, leg: "late" },
+    }, new Date(2026, 8, 4, 5, 30));
+    expect(exposure).toBe(direction === "BUY" ? size : -size);
+  });
+
+  it("submits the Saturday late live adjustment and propagates broker rejection", async () => {
+    const rejection = new Error("Market is closed");
+    const mock = client({
+      openMarketPosition: vi.fn(async () => { throw rejection; }),
+    });
+    const lateLong = {
+      ...job(),
+      targetPosition: { ...job().targetPosition!, direction: "BUY" as const, leg: "late" as const },
+    };
+
+    await expect(executeTargetPositionJob(mock, lateLong, new Date(2026, 8, 5, 5, 30)))
+      .rejects.toBe(rejection);
+    expect(mock.openMarketPosition).toHaveBeenCalledWith({
+      epic: "XAUUSD", direction: "BUY", size: 1, protection: null,
+    });
+  });
+
   it("uses live exposure, ignores fixed payload protection, and submits the derived delta", async () => {
     const mock = client();
     const result = await executeTargetPositionJob(mock, job(), new Date(2026, 8, 2, 3, 30));

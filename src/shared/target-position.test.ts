@@ -94,7 +94,7 @@ describe("target-position planning", () => {
     ).toMatchObject({ kind: "noop" });
   });
 
-  it("treats Friday normally, flattens at the Saturday-morning Friday close, and skips the weekend", () => {
+  it("flattens at the Saturday-morning Friday close and otherwise adjusts normally on weekends", () => {
     expect(
       planTargetTransition({
         currentPosition: -2,
@@ -130,7 +130,7 @@ describe("target-position planning", () => {
         leg: "late",
         executionTime: new Date(2026, 8, 5, 5, 30),
       }),
-    ).toMatchObject({ kind: "noop" });
+    ).toMatchObject({ kind: "order", direction: "BUY", size: 3 });
     expect(
       planTargetTransition({
         currentPosition: 2,
@@ -139,7 +139,7 @@ describe("target-position planning", () => {
         leg: "early",
         executionTime: new Date(2026, 8, 6, 3, 30),
       }),
-    ).toMatchObject({ kind: "noop" });
+    ).toMatchObject({ kind: "order", direction: "SELL", size: 5 });
   });
 });
 

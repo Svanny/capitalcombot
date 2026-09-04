@@ -93,20 +93,17 @@ export function aggregateSignedPosition(positions: OpenPosition[], epic: string)
 
 export function planTargetTransition(input: TargetTransitionInput): TargetTransitionPlan {
   const day = input.executionTime.getDay();
-  if (day === 0) {
-    return { kind: "noop", reason: "Weekend target-position leg skipped." };
-  }
 
   const target = input.targetDirection === "BUY" ? input.targetSize : -input.targetSize;
   let delta = 0;
   let reason = "";
 
-  if (day === 6) {
-    if (input.leg === "late") {
-      return { kind: "noop", reason: "Saturday late target-position leg skipped after the Friday close." };
-    }
+  if (day === 6 && input.leg === "early") {
     delta = -input.currentPosition;
     reason = "Friday-close target-position flatten on the Saturday early leg.";
+  } else if (day === 6 && input.leg === "late") {
+    delta = target - input.currentPosition;
+    reason = "Saturday late target-position entry after Friday-close flatten.";
   } else if (input.leg === "early") {
     if (target < 0) {
       delta = target - input.currentPosition;

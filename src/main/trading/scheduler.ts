@@ -68,7 +68,7 @@ export class ScheduledOrderScheduler {
   restore(options: RestoreOptions = {}): ScheduledOrderJob[] {
     const armScheduled = options.armScheduled ?? true;
     const restored = assignUniqueJobIds(this.store.getState().schedules)
-      .map((job) => this.restoreJob(job, armScheduled))
+      .map((job) => this.restoreJob(clearLegacyTargetPause(job), armScheduled))
       .sort(sortJobs);
 
     this.store.setSchedules(restored);
@@ -574,29 +574,10 @@ function createTargetPairJob(
   size: number,
   plan: TargetTransitionPlan,
 ): ScheduledOrderJob {
-  const wasAutomaticallyPaused =
-    job.status === "paused" && job.reason?.startsWith(TARGET_NO_ORDER_PAUSE_PREFIX);
-  const isStructurallyUnusedLateLeg = direction === "SELL" && leg === "late";
-  const isTerminalOneOffSkip =
-    job.scheduleType === "one-off" &&
-    plan.kind === "noop" &&
-    (plan.reason.startsWith("Saturday late") || plan.reason.startsWith("Weekend"));
-  const pauseUnusedLeg =
-    plan.kind === "noop" &&
-    job.status === "scheduled" &&
-    (isStructurallyUnusedLateLeg || isTerminalOneOffSkip);
-  const resumeNeededLeg = plan.kind === "order" && wasAutomaticallyPaused;
-
   return {
-    ...job,
+    ...clearLegacyTargetPause(job),
     direction: plan.kind === "order" ? plan.direction : job.direction,
     size: plan.kind === "order" ? plan.size : job.size,
-    status: pauseUnusedLeg ? "paused" : resumeNeededLeg ? "scheduled" : job.status,
-    reason: pauseUnusedLeg
-      ? `${TARGET_NO_ORDER_PAUSE_PREFIX} ${plan.reason}`
-      : resumeNeededLeg
-        ? undefined
-        : job.reason,
     targetPosition: {
       pairId,
       leg,
@@ -604,6 +585,13 @@ function createTargetPairJob(
       size,
     },
   };
+}
+
+function clearLegacyTargetPause(job: ScheduledOrderJob): ScheduledOrderJob {
+  if (job.targetPosition && job.status === "paused" && job.reason?.startsWith(TARGET_NO_ORDER_PAUSE_PREFIX)) {
+    return { ...job, status: "scheduled", reason: undefined };
+  }
+  return job;
 }
 
 function buildScheduleId(): string {
