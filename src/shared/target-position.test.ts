@@ -63,6 +63,11 @@ describe("target-position planning", () => {
     [-2, "BUY", 3, "late", "BUY", 5],
     [5, "BUY", 3, "late", "SELL", 2],
     [3, "BUY", 3, "late", null, null],
+    [0, "SELL", 3, "late", "SELL", 3],
+    [-1, "SELL", 3, "late", "SELL", 2],
+    [-5, "SELL", 3, "late", "BUY", 2],
+    [2, "SELL", 3, "late", "SELL", 5],
+    [-3, "SELL", 3, "late", null, null],
   ] as const)(
     "plans current %s toward %s %s on the %s leg",
     (currentPosition, targetDirection, targetSize, leg, direction, size) => {
@@ -82,16 +87,16 @@ describe("target-position planning", () => {
     },
   );
 
-  it("skips the late leg for a short target", () => {
+  it("recovers a short target on Monday late after earlier orders could not execute", () => {
     expect(
       planTargetTransition({
-        currentPosition: -1,
+        currentPosition: 0,
         targetDirection: "SELL",
         targetSize: 2,
         leg: "late",
-        executionTime: new Date(2026, 8, 2, 5, 30),
+        executionTime: new Date(2026, 8, 7, 5, 30),
       }),
-    ).toMatchObject({ kind: "noop" });
+    ).toMatchObject({ kind: "order", direction: "SELL", size: 2 });
   });
 
   it("flattens at the Saturday-morning Friday close and otherwise adjusts normally on weekends", () => {

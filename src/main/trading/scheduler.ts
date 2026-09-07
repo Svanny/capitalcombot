@@ -490,7 +490,10 @@ export class ScheduledOrderScheduler {
         ),
       );
     } catch (error) {
-      const detail = normalizeError(error).message;
+      const failure = normalizeError(error);
+      const detail = failure.detail
+        ? `${failure.message} [${failure.code}] ${failure.detail}`
+        : failure.message;
 
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());

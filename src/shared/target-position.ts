@@ -112,11 +112,11 @@ export function planTargetTransition(input: TargetTransitionInput): TargetTransi
       delta = -input.currentPosition;
       reason = "Early target-position flatten before long entry.";
     }
-  } else if (target > 0) {
-    delta = target - input.currentPosition;
-    reason = "Late target-position move to long exposure.";
   } else {
-    return { kind: "noop", reason: "Late leg is not needed for a short target." };
+    delta = target - input.currentPosition;
+    reason = target > 0
+      ? "Late target-position move to long exposure."
+      : "Late target-position move to short exposure.";
   }
 
   delta = roundSize(delta);

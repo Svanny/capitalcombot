@@ -133,14 +133,16 @@ describe("executeTargetPositionJob", () => {
   });
 
   it("records no-op legs without submitting a zero-size order", async () => {
-    const mock = client({ listPositions: vi.fn(async () => []) });
+    const mock = client({
+      listPositions: vi.fn(async () => [{ ...openPosition(), direction: "SELL" as const, size: 3 }]),
+    });
     const lateShort = {
       ...job(),
       targetPosition: { ...job().targetPosition!, leg: "late" as const },
     };
     const result = await executeTargetPositionJob(mock, lateShort, new Date(2026, 8, 2, 5, 30));
 
-    expect(result.reason).toMatch(/not needed/);
+    expect(result.reason).toMatch(/already satisfies/);
     expect(mock.openMarketPosition).not.toHaveBeenCalled();
   });
 

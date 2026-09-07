@@ -234,6 +234,52 @@ describe("ScheduledOrderScheduler", () => {
     expect(store.getState().schedules[0]?.lastResolvedProtection?.profitLevel).toBe(3030.8);
   });
 
+  it.each(["one-off", "repeating"] as const)(
+    "preserves broker rejection details for a %s target leg",
+    async (scheduleType) => {
+      const store = new MemoryAppStateStore();
+      const clock = new FakeClock();
+      const placeSpy = vi.fn(async () => {
+        throw {
+          code: "CAPITAL_400",
+          message: "Capital.com request failed.",
+          recoverable: false,
+          detail: "error.market.closed apiKey=secret-value",
+        };
+      });
+      const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+      const job = scheduler.schedule({
+        epic: "GOLD",
+        instrumentName: "Gold",
+        direction: "SELL",
+        size: 1.33,
+        ...(scheduleType === "one-off"
+          ? { type: "one-off" as const, runAt: "2026-03-23T10:30:00.000Z" }
+          : { type: "repeating" as const, runTime: "05:30" }),
+      });
+      store.setSchedules([{
+        ...job,
+        targetPosition: { pairId: "pair", leg: "late", direction: "SELL", size: 1.33 },
+      }]);
+
+      await clock.advanceTo(job.runAt);
+
+      const expectedError = "Capital.com request failed. [CAPITAL_400] error.market.closed apiKey=****";
+      const state = store.getState();
+      expect(placeSpy).toHaveBeenCalledTimes(1);
+      expect(state.schedules[0]).toMatchObject({
+        status: scheduleType === "repeating" ? "scheduled" : "failed",
+        lastError: expectedError,
+      });
+      expect(state.executionLog[0]).toMatchObject({ status: "error" });
+      expect(state.executionLog[0].detail).toContain(expectedError);
+      expect(JSON.stringify(state)).not.toContain("secret-value");
+      if (scheduleType === "repeating") {
+        expect(new Date(state.schedules[0].runAt).getTime()).toBeGreaterThan(clock.now());
+      }
+    },
+  );
+
   it("cancels a scheduled job before it fires", async () => {
     const store = new MemoryAppStateStore();
     const placeSpy = vi.fn(async () => ({
