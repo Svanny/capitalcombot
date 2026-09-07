@@ -361,7 +361,7 @@ describe("ScheduledOrderScheduler", () => {
     expect(store.getState().schedules[0]?.status).toBe("paused");
   });
 
-  it("restores legacy auto-paused target legs without resuming manually paused legs", async () => {
+  it("preserves legacy automatic and manual target pauses on restore", async () => {
     const store = new MemoryAppStateStore();
     const clock = new FakeClock();
     const placeSpy = vi.fn(async () => ({ position: null, resolvedProtection: null }));
@@ -383,11 +383,38 @@ describe("ScheduledOrderScheduler", () => {
     ]);
     scheduler.restore({ armScheduled: false });
     expect(scheduler.list().find((job) => job.id === base.id))
-      .toMatchObject({ status: "scheduled", reason: undefined });
+      .toMatchObject({ status: "paused" });
     expect(scheduler.list().find((job) => job.id === "manual"))
       .toMatchObject({ status: "paused", reason: "Paused manually" });
     scheduler.armScheduledJobs();
     await clock.advanceTo("2026-03-23T10:30:00.000Z");
+    expect(placeSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "Late leg is not needed for a short target.",
+    "Late target-position move to long exposure. Position already satisfies this leg.",
+  ])("pauses a saved unneeded target leg on restore: %s", async (reason) => {
+    const store = new MemoryAppStateStore();
+    const clock = new FakeClock();
+    const placeSpy = vi.fn(async () => ({ position: null, resolvedProtection: null }));
+    const scheduler = new ScheduledOrderScheduler(store, placeSpy, clock);
+    const job = scheduler.schedule({
+      epic: "GOLD", instrumentName: "Gold", direction: "SELL", size: 1.33,
+      type: "repeating", runTime: "05:30",
+    });
+    store.setSchedules([{ ...job, reason,
+      targetPosition: { pairId: "pair", leg: "late", direction: "SELL", size: 1.33 },
+    }]);
+    scheduler.restore();
+    scheduler.armScheduledJobs();
+    expect(scheduler.list()[0]).toMatchObject({ status: "paused", reason: expect.stringContaining(reason) });
+    await clock.advanceTo(job.runAt);
+    expect(placeSpy).not.toHaveBeenCalled();
+    scheduler.reactivate(job.id);
+    const nextRun = scheduler.list()[0].runAt;
+    scheduler.restore();
+    await clock.advanceTo(nextRun);
     expect(placeSpy).toHaveBeenCalledTimes(1);
   });
 

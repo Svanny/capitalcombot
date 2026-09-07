@@ -69,7 +69,7 @@ export class ScheduledOrderScheduler {
   restore(options: RestoreOptions = {}): ScheduledOrderJob[] {
     const armScheduled = options.armScheduled ?? true;
     const restored = assignUniqueJobIds(this.store.getState().schedules)
-      .map((job) => this.restoreJob(clearLegacyTargetPause(job), armScheduled))
+      .map((job) => this.restoreJob(restoreTargetPause(job), armScheduled))
       .sort(sortJobs);
 
     this.store.setSchedules(restored);
@@ -591,7 +591,7 @@ function createTargetPairJob(
   plan: TargetTransitionPlan,
 ): ScheduledOrderJob {
   return {
-    ...clearLegacyTargetPause(job),
+    ...job,
     direction: plan.kind === "order" ? plan.direction : job.direction,
     size: plan.kind === "order" ? plan.size : job.size,
     targetPosition: {
@@ -603,9 +603,13 @@ function createTargetPairJob(
   };
 }
 
-function clearLegacyTargetPause(job: ScheduledOrderJob): ScheduledOrderJob {
-  if (job.targetPosition && job.status === "paused" && job.reason?.startsWith(TARGET_NO_ORDER_PAUSE_PREFIX)) {
-    return { ...job, status: "scheduled", reason: undefined };
+function restoreTargetPause(job: ScheduledOrderJob): ScheduledOrderJob {
+  if (
+    job.targetPosition && job.status === "scheduled" &&
+    (job.reason === "Late leg is not needed for a short target." ||
+      job.reason?.endsWith("Position already satisfies this leg."))
+  ) {
+    return { ...job, status: "paused", reason: `${TARGET_NO_ORDER_PAUSE_PREFIX} ${job.reason}` };
   }
   return job;
 }
