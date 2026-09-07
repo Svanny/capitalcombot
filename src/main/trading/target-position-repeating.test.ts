@@ -6,7 +6,7 @@ import { executeTargetPositionJob } from "./target-position-execution";
 
 afterEach(() => vi.useRealTimers());
 
-it("recovers a short target on Monday late after weekend failures and keeps running daily", async () => {
+it("retries failed targets daily, pauses satisfied legs, and supports reactivation after reload", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 8, 4, 12));
   let exposure = 1.57;
@@ -70,12 +70,21 @@ it("recovers a short target on Monday late after weekend failures and keeps runn
   await advanceTo(new Date(2026, 8, 8, 5, 30));
   expect(exposure).toBe(-1.33);
   expect(client.openMarketPosition).toHaveBeenCalledTimes(submissions);
-  expect(lateJob().runAt).toBe(new Date(2026, 8, 9, 5, 30).toISOString());
+  expect(lateJob()).toMatchObject({ status: "paused", reason: expect.stringContaining("no order needed") });
   expect(execute.mock.calls.filter(([job]) => job.id === late.id)).toHaveLength(4);
 
-  // A position change after the next early run is corrected by the late run.
+  vi.clearAllTimers();
+  scheduler = new ScheduledOrderScheduler(store, execute);
+  scheduler.restore();
+  scheduler.armScheduledJobs();
+  const attempts = execute.mock.calls.length;
   await advanceTo(new Date(2026, 8, 9, 4));
+  expect(execute).toHaveBeenCalledTimes(attempts);
+  expect(lateJob().status).toBe("paused");
+
+  // Only explicit reactivation resumes the paused leg.
   exposure = -0.5;
+  scheduler.reactivate(late.id);
   await advanceTo(new Date(2026, 8, 9, 5, 30));
   expect(exposure).toBe(-1.33);
   expect(client.openMarketPosition).toHaveBeenLastCalledWith({

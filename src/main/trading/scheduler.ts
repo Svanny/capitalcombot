@@ -42,6 +42,7 @@ export interface ScheduledExecutionResult {
   position: OpenPosition | null;
   resolvedProtection: ResolvedProtection | null;
   reason?: string;
+  noOrderNeeded?: boolean;
 }
 
 export interface RestoreOptions {
@@ -455,7 +456,19 @@ export class ScheduledOrderScheduler {
     this.replaceJob(executing);
 
     try {
-      const { position, resolvedProtection, reason } = await this.placeOrder(executing);
+      const { position, resolvedProtection, reason, noOrderNeeded } = await this.placeOrder(executing);
+
+      if (executing.targetPosition && noOrderNeeded) {
+        const pauseReason = `Paused: no order needed. ${reason ?? "Target position is already satisfied."}`;
+        this.replaceJob({
+          ...executing,
+          status: "paused",
+          lastError: undefined,
+          reason: pauseReason,
+        });
+        this.store.appendExecution(buildExecutionResult("schedule", "info", pauseReason));
+        return;
+      }
 
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());

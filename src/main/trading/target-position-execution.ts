@@ -48,6 +48,7 @@ export async function executeTargetPositionJob(
       position: null,
       resolvedProtection: null,
       reason: plan.reason,
+      noOrderNeeded: true,
     };
   }
 

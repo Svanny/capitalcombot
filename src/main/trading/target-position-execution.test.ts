@@ -143,6 +143,7 @@ describe("executeTargetPositionJob", () => {
     const result = await executeTargetPositionJob(mock, lateShort, new Date(2026, 8, 2, 5, 30));
 
     expect(result.reason).toMatch(/already satisfies/);
+    expect(result.noOrderNeeded).toBe(true);
     expect(mock.openMarketPosition).not.toHaveBeenCalled();
   });
 
