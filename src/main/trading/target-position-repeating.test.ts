@@ -6,7 +6,7 @@ import { executeTargetPositionJob } from "./target-position-execution";
 
 afterEach(() => vi.useRealTimers());
 
-it("retries failed targets daily, pauses satisfied legs, and supports reactivation after reload", async () => {
+it("retries failed targets daily and keeps both satisfied legs active across reload and exposure drift", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(2026, 8, 4, 12));
   let exposure = 1.57;
@@ -47,7 +47,11 @@ it("retries failed targets daily, pauses satisfied legs, and supports reactivati
     targetPosition: { enabled: true, direction: "SELL", size: 1.33 },
     targetCurrentPosition: exposure,
   });
-  const advanceTo = async (date: Date) => vi.advanceTimersByTimeAsync(date.getTime() - Date.now());
+  const advanceTo = async (date: Date) => {
+    const delay = date.getTime() - Date.now();
+    expect(delay, `Advance from ${new Date().toISOString()} to ${date.toISOString()}`).toBeGreaterThanOrEqual(0);
+    await vi.advanceTimersByTimeAsync(delay);
+  };
   const lateJob = () => scheduler.list().find(job => job.id === late.id)!;
 
   await advanceTo(new Date(2026, 8, 5, 3, 30));
@@ -63,6 +67,7 @@ it("retries failed targets daily, pauses satisfied legs, and supports reactivati
 
   // Reload the scheduler from persisted schedules after the successful entry.
   vi.clearAllTimers();
+  vi.setSystemTime(new Date(2026, 8, 7, 5, 30));
   scheduler = new ScheduledOrderScheduler(store, execute);
   scheduler.restore();
 
@@ -70,21 +75,21 @@ it("retries failed targets daily, pauses satisfied legs, and supports reactivati
   await advanceTo(new Date(2026, 8, 8, 5, 30));
   expect(exposure).toBe(-1.33);
   expect(client.openMarketPosition).toHaveBeenCalledTimes(submissions);
-  expect(lateJob()).toMatchObject({ status: "paused", reason: expect.stringContaining("no order needed") });
+  expect(lateJob()).toMatchObject({ status: "scheduled", reason: expect.stringContaining("already satisfies") });
   expect(execute.mock.calls.filter(([job]) => job.id === late.id)).toHaveLength(4);
 
   vi.clearAllTimers();
+  vi.setSystemTime(new Date(2026, 8, 8, 5, 30));
   scheduler = new ScheduledOrderScheduler(store, execute);
   scheduler.restore();
   scheduler.armScheduledJobs();
   const attempts = execute.mock.calls.length;
   await advanceTo(new Date(2026, 8, 9, 4));
-  expect(execute).toHaveBeenCalledTimes(attempts);
-  expect(lateJob().status).toBe("paused");
+  expect(execute).toHaveBeenCalledTimes(attempts + 1);
+  expect(lateJob().status).toBe("scheduled");
 
-  // Only explicit reactivation resumes the paused leg.
+  // The next late leg repairs exposure drift without manual reactivation.
   exposure = -0.5;
-  scheduler.reactivate(late.id);
   await advanceTo(new Date(2026, 8, 9, 5, 30));
   expect(exposure).toBe(-1.33);
   expect(client.openMarketPosition).toHaveBeenLastCalledWith({

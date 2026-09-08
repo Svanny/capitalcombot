@@ -248,8 +248,8 @@ export function TargetPositionButton({ loading, onSubmit, schedules }: TargetPos
                 Long targets flatten early and enter late. Short targets execute early; the late leg checks live
                 exposure again and corrects any remaining difference. Saturday’s early leg flattens at the Friday
                 close. Repeating schedules run daily, including weekends, and try again at their next scheduled time
-                after a failure. A leg whose target is already satisfied pauses without submitting an order and
-                stays paused until reactivated.
+                after a failure. A leg whose target is already satisfied skips the order and
+                checks live exposure again at its next scheduled time.
               </p>
 
               <div className="button-row">

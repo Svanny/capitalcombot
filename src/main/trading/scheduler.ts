@@ -247,7 +247,7 @@ export class ScheduledOrderScheduler {
       scheduleType: input.type,
       runAt: scheduledAt.toISOString(),
       runTime: input.type === "repeating" ? input.runTime : undefined,
-      reason: undefined,
+      reason: input.targetPosition?.enabled ? current.reason : undefined,
     };
 
     const targetPositionUpdate = input.targetPosition;
@@ -458,18 +458,6 @@ export class ScheduledOrderScheduler {
     try {
       const { position, resolvedProtection, reason, noOrderNeeded } = await this.placeOrder(executing);
 
-      if (executing.targetPosition && noOrderNeeded) {
-        const pauseReason = `Paused: no order needed. ${reason ?? "Target position is already satisfied."}`;
-        this.replaceJob({
-          ...executing,
-          status: "paused",
-          lastError: undefined,
-          reason: pauseReason,
-        });
-        this.store.appendExecution(buildExecutionResult("schedule", "info", pauseReason));
-        return;
-      }
-
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());
         const rescheduledJob: ScheduledOrderJob = {
@@ -497,7 +485,7 @@ export class ScheduledOrderScheduler {
       this.store.appendExecution(
         buildExecutionResult(
           "schedule",
-          "success",
+          noOrderNeeded ? "info" : "success",
           reason ?? `Scheduled ${executing.direction} order placed for ${executing.instrumentName}.`,
           position ? `Deal ${position.dealId}` : undefined,
         ),
@@ -591,7 +579,7 @@ function createTargetPairJob(
   plan: TargetTransitionPlan,
 ): ScheduledOrderJob {
   return {
-    ...job,
+    ...restoreTargetPause(job),
     direction: plan.kind === "order" ? plan.direction : job.direction,
     size: plan.kind === "order" ? plan.size : job.size,
     targetPosition: {
@@ -605,11 +593,11 @@ function createTargetPairJob(
 
 function restoreTargetPause(job: ScheduledOrderJob): ScheduledOrderJob {
   if (
-    job.targetPosition && job.status === "scheduled" &&
-    (job.reason === "Late leg is not needed for a short target." ||
-      job.reason?.endsWith("Position already satisfies this leg."))
+    job.targetPosition && job.status === "paused" &&
+    (job.reason?.startsWith(TARGET_NO_ORDER_PAUSE_PREFIX) ||
+      job.reason?.startsWith("Paused: no order needed."))
   ) {
-    return { ...job, status: "paused", reason: `${TARGET_NO_ORDER_PAUSE_PREFIX} ${job.reason}` };
+    return { ...job, status: "scheduled", reason: undefined };
   }
   return job;
 }
