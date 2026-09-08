@@ -468,11 +468,14 @@ describe("App", () => {
     window.capitalApi = api;
     render(<App />);
     fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
-    expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
-    expect(screen.getByText("paused", { exact: true })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(await screen.findByText("Auto-paused", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText(/Next automatic check/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Stop auto-checks" }));
     await waitFor(() => expect(api.schedules.pause).toHaveBeenCalledWith({ jobId: job.id }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop auto-checks" })).not.toBeInTheDocument());
+    expect(screen.getByText("paused", { exact: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
   });
 

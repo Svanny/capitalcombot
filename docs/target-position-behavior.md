@@ -23,7 +23,8 @@ tries at its next daily occurrence. Zero differences never submit an order.
   no-op completes with an informational result.
 - Saving a changed target immediately re-evaluates both legs.
 - Manual Pause disables checks until Resume, including across target edits and
-  restarts. The Pause button on an automatic pause makes it manual.
+  restarts. Automatically paused cards show **Auto-paused**, their next check time,
+  and **Stop auto-checks** to switch to a manual pause; only manual pauses show Resume.
 - Automatic and manual pauses are distinguished by persisted metadata, not by
   the card's displayed BUY/SELL fields. Legacy automatic pause reasons are migrated.
 
@@ -36,6 +37,11 @@ early time. A manually paused leg does not change projected exposure.
 Paired updates persist before replacing timers. A failed save leaves the old jobs
 and timers intact. Restoring schedules preserves manual pauses and schedules the
 next daily check for missed repeating occurrences; it does not replay missed orders.
+If the app stopped during execution, repeating schedules resume at their next future
+daily occurrence with an unknown-outcome message. Interrupted one-off orders are
+marked failed and require checking the broker account before scheduling another order.
+Malformed broker position snapshots are rejected; only an explicit empty positions
+array is treated as a flat portfolio.
 The app must be running and connected to execute schedules.
 
 ## Verification

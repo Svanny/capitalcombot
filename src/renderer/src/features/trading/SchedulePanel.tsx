@@ -238,6 +238,7 @@ export function SchedulePanel({
               const isEditing = editingJobId === job.id;
               const isPending = job.status === "scheduled";
               const isPaused = job.status === "paused";
+              const isAutoPaused = isPaused && Boolean(job.targetPosition && job.targetAutoPaused);
               const isCancelled = job.status === "cancelled";
 
               return (
@@ -256,9 +257,9 @@ export function SchedulePanel({
                     </p>
                   </div>
                   <div className="schedule-meta">
-                    <span className={`status-pill status-${job.status}`}>{job.status}</span>
+                    <span className={`status-pill status-${job.status}`}>{isAutoPaused ? "Auto-paused" : job.status}</span>
                     <span>
-                      {job.reason ??
+                      {isAutoPaused ? `No adjustment needed. Next automatic check ${formatDateTime(job.runAt)}.` : job.reason ??
                         (job.scheduleType === "repeating"
                           ? `Next run ${formatDateTime(job.runAt)}`
                           : "Waiting for schedule window.")}
@@ -294,7 +295,7 @@ export function SchedulePanel({
                   ) : null}
                   {isPaused || isCancelled ? (
                     <div className="inline-actions">
-                      {isPaused && job.targetAutoPaused ? (
+                      {isAutoPaused ? (
                         <button
                           type="button"
                           className="ghost"
@@ -302,7 +303,7 @@ export function SchedulePanel({
                           title="Pause automatic checks until manually resumed"
                           onClick={() => void onPause(job)}
                         >
-                          Pause
+                          Stop auto-checks
                         </button>
                       ) : null}
                       {isPaused ? (
@@ -315,14 +316,14 @@ export function SchedulePanel({
                           Edit
                         </button>
                       ) : null}
-                      <button
+                      {!isAutoPaused ? <button
                         type="button"
                         className="ghost"
                         disabled={loadingReactivate}
                         onClick={() => void onReactivate(job)}
                       >
                         {isPaused ? "Resume" : "Reactivate"}
-                      </button>
+                      </button> : null}
                     </div>
                   ) : null}
                   {isEditing ? (
