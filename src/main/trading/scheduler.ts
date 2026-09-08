@@ -67,12 +67,11 @@ export class ScheduledOrderScheduler {
 
   restore(options: RestoreOptions = {}): ScheduledOrderJob[] {
     const armScheduled = options.armScheduled ?? true;
-    [...this.timers.keys()].forEach((id) => this.disarm(id));
     const restored = assignUniqueJobIds(this.store.getState().schedules)
-      .map((job) => this.restoreJob(restoreTargetPause(job), armScheduled))
+      .map((job) => this.restoreJob(restoreTargetPause(job)))
       .sort(sortJobs);
 
-    this.store.setSchedules(restored);
+    this.replaceJobs(restored, new Set([...this.timers.keys(), ...restored.map((job) => job.id)]), armScheduled);
     return restored;
   }
 
@@ -118,7 +117,6 @@ export class ScheduledOrderScheduler {
         return job;
       }
 
-      this.disarm(job.id);
       return {
         ...job,
         status: "cancelled" as const,
@@ -126,7 +124,7 @@ export class ScheduledOrderScheduler {
       };
     });
 
-    this.store.setSchedules(nextSchedules);
+    this.replaceJobs(nextSchedules, new Set(current?.status === "scheduled" ? [jobId] : []));
     return nextSchedules;
   }
 
@@ -145,7 +143,6 @@ export class ScheduledOrderScheduler {
       );
     }
 
-    this.disarm(current.id);
     const nextSchedules = this.list().map((job) =>
       job.id === jobId
         ? {
@@ -157,7 +154,7 @@ export class ScheduledOrderScheduler {
         : job,
     );
 
-    this.store.setSchedules(nextSchedules);
+    this.replaceJobs(nextSchedules, new Set([jobId]));
     return nextSchedules;
   }
 
@@ -380,7 +377,28 @@ export class ScheduledOrderScheduler {
     return nextJob;
   }
 
-  private restoreJob(job: ScheduledOrderJob, armScheduled: boolean): ScheduledOrderJob {
+  private restoreJob(job: ScheduledOrderJob): ScheduledOrderJob {
+    if (job.status === "executing") {
+      const unknownOutcome = "The app stopped during execution; the broker outcome is unknown.";
+      if (job.scheduleType === "repeating" && job.runTime && isValidRunTime(job.runTime)) {
+        return {
+          ...job,
+          status: "scheduled",
+          targetAutoPaused: undefined,
+          runAt: getNextOccurrenceFromTime(job.runTime, this.clock.now()).toISOString(),
+          reason: `${unknownOutcome} Next daily run scheduled; the interrupted order will not be replayed.`,
+          lastError: unknownOutcome,
+        };
+      }
+      return {
+        ...job,
+        status: "failed",
+        targetAutoPaused: undefined,
+        reason: `${unknownOutcome} Check the broker account before scheduling another order.`,
+        lastError: unknownOutcome,
+      };
+    }
+
     if (!canCheckSchedule(job)) {
       return job;
     }
@@ -404,15 +422,9 @@ export class ScheduledOrderScheduler {
           reason: "Missed repeating run while the app was not running. Next run scheduled.",
           lastError: "Missed while the app was not running.",
         };
-        if (armScheduled) {
-          this.arm(rescheduledJob);
-        }
         return rescheduledJob;
       }
 
-      if (armScheduled) {
-        this.arm(job);
-      }
       return job;
     }
 
@@ -425,9 +437,6 @@ export class ScheduledOrderScheduler {
       };
     }
 
-    if (armScheduled) {
-      this.arm(job);
-    }
     return job;
   }
 
@@ -559,12 +568,12 @@ export class ScheduledOrderScheduler {
     this.store.setSchedules(nextSchedules);
   }
 
-  private replaceJobs(nextSchedules: ScheduledOrderJob[], affectedIds: Set<string>): void {
+  private replaceJobs(nextSchedules: ScheduledOrderJob[], affectedIds: Set<string>, armScheduled = true): void {
     const sortedSchedules = nextSchedules.slice().sort(sortJobs);
     this.store.setSchedules(sortedSchedules);
     affectedIds.forEach((jobId) => this.disarm(jobId));
     sortedSchedules
-      .filter((job) => affectedIds.has(job.id) && canCheckSchedule(job))
+      .filter((job) => armScheduled && affectedIds.has(job.id) && canCheckSchedule(job))
       .forEach((job) => this.arm(job));
   }
 }

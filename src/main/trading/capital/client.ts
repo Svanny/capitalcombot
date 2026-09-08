@@ -208,9 +208,9 @@ export class CapitalClient {
   }
 
   async listPositions(): Promise<OpenPosition[]> {
-    const response = await this.authorizedJson<PositionsResponse>("/api/v1/positions");
+    const response = await this.authorizedJson<unknown>("/api/v1/positions");
 
-    return (response.positions ?? []).map(({ position, market }) => mapOpenPosition(position, market));
+    return validatePositionsResponse(response).map(({ position, market }) => mapOpenPosition(position, market));
   }
 
   async getAccountPreferences(): Promise<CapitalAccountPreferences> {
@@ -545,6 +545,31 @@ function mapSingleMarketDetails(raw: SingleMarketResponse): MarketSummary {
     percentageChange: numberOrNull(snapshot.percentageChange),
     updateTime: stringOrNull(snapshot.updateTimeUTC ?? snapshot.updateTime),
   };
+}
+
+function validatePositionsResponse(value: unknown): NonNullable<PositionsResponse["positions"]> {
+  const invalid = () => createAppError(
+    "POSITIONS_RESPONSE_INVALID",
+    "Capital.com returned an incomplete or invalid positions snapshot. No position balance can be determined.",
+  );
+  const record = (entry: unknown): entry is Record<string, unknown> =>
+    typeof entry === "object" && entry !== null && !Array.isArray(entry);
+  if (!record(value) || !Array.isArray(value.positions)) {
+    throw invalid();
+  }
+  for (const entry of value.positions) {
+    if (!record(entry) || !record(entry.position) || !record(entry.market)) {
+      throw invalid();
+    }
+    const { size, direction } = entry.position;
+    const validSizeType = typeof size === "number" || (typeof size === "string" && size.trim().length > 0);
+    if (typeof entry.market.epic !== "string" || !entry.market.epic.trim() ||
+      (direction !== "BUY" && direction !== "SELL") ||
+      !validSizeType || !Number.isFinite(Number(size)) || Number(size) <= 0) {
+      throw invalid();
+    }
+  }
+  return value.positions;
 }
 
 function mapOpenPosition(
