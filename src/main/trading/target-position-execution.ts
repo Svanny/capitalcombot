@@ -25,7 +25,7 @@ export async function executeTargetPositionJob(
   }
 
   const preferences = await client.getAccountPreferences();
-  if (preferences.hedgingMode) {
+  if (preferences.hedgingMode !== false) {
     throw createAppError(
       "HEDGING_MODE_ENABLED",
       "Target-position execution is blocked while Capital.com hedging mode is enabled.",

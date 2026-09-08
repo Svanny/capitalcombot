@@ -41,6 +41,12 @@ function schedule(overrides: Partial<ScheduledOrderJob> = {}): ScheduledOrderJob
 }
 
 describe("target-position planning", () => {
+  it.each([NaN, Infinity, 0, -1])("rejects invalid target size %s", (targetSize) => {
+    expect(() => planTargetTransition({
+      currentPosition: 0, targetDirection: "BUY", targetSize, leg: "early", executionTime: new Date(),
+    })).toThrow(/invalid/);
+  });
+
   it("aggregates signed exposure for only the requested epic", () => {
     expect(
       aggregateSignedPosition(

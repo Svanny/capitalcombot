@@ -111,6 +111,8 @@ export interface ScheduledOrderJob {
   protection?: ProtectionStrategy | null;
   lastResolvedProtection?: ResolvedProtection | null;
   targetPosition?: ScheduledTargetPosition | null;
+  /** Paused because no adjustment is needed; still rechecked at runAt. */
+  targetAutoPaused?: boolean;
 }
 
 export interface ScheduledTargetPosition {

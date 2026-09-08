@@ -120,15 +120,21 @@ describe("executeTargetPositionJob", () => {
     expect(result.reason).toMatch(/Submitted SELL 5/);
   });
 
-  it("fails closed before reading positions when hedging mode is enabled", async () => {
+  it.each([true, undefined, null])("fails closed when hedging mode is not confirmed false: %s", async (hedgingMode) => {
     const mock = client({
-      getAccountPreferences: vi.fn(async () => ({ hedgingMode: true })),
+      getAccountPreferences: vi.fn(async () => ({ hedgingMode } as never)),
     });
 
     await expect(executeTargetPositionJob(mock, job())).rejects.toMatchObject({
       code: "HEDGING_MODE_ENABLED",
     });
     expect(mock.listPositions).not.toHaveBeenCalled();
+    expect(mock.openMarketPosition).not.toHaveBeenCalled();
+  });
+
+  it.each([NaN, Infinity, -1, 0])("does not submit orders from malformed live position size %s", async (size) => {
+    const mock = client({ listPositions: vi.fn(async () => [{ ...openPosition(), size }]) });
+    await expect(executeTargetPositionJob(mock, job())).rejects.toThrow(/invalid/);
     expect(mock.openMarketPosition).not.toHaveBeenCalled();
   });
 

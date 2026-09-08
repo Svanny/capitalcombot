@@ -81,9 +81,13 @@ export function orderTargetPairJobs(jobs: ScheduledOrderJob[]): ScheduledOrderJo
 }
 
 export function aggregateSignedPosition(positions: OpenPosition[], epic: string): number {
+  const relevant = positions.filter((position) => position.epic === epic);
+  if (relevant.some((position) => !Number.isFinite(position.size) || position.size <= 0 ||
+    (position.direction !== "BUY" && position.direction !== "SELL"))) {
+    throw new Error("Live position direction or size is invalid.");
+  }
   return roundSize(
-    positions
-      .filter((position) => position.epic === epic)
+    relevant
       .reduce(
         (total, position) => total + (position.direction === "BUY" ? position.size : -position.size),
         0,
@@ -92,6 +96,11 @@ export function aggregateSignedPosition(positions: OpenPosition[], epic: string)
 }
 
 export function planTargetTransition(input: TargetTransitionInput): TargetTransitionPlan {
+  if (!Number.isFinite(input.currentPosition) || !Number.isFinite(input.targetSize) || input.targetSize <= 0 ||
+    (input.targetDirection !== "BUY" && input.targetDirection !== "SELL") ||
+    (input.leg !== "early" && input.leg !== "late") || !Number.isFinite(input.executionTime.getTime())) {
+    throw new Error("Target position inputs are invalid.");
+  }
   const day = input.executionTime.getDay();
 
   const target = input.targetDirection === "BUY" ? input.targetSize : -input.targetSize;

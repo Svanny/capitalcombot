@@ -386,7 +386,7 @@ describe("ScheduledOrderScheduler", () => {
     ]);
     scheduler.restore({ armScheduled: false });
     expect(scheduler.list().find((job) => job.id === base.id))
-      .toMatchObject({ status: "scheduled", reason: undefined });
+      .toMatchObject({ status: "paused", targetAutoPaused: true });
     expect(scheduler.list().find((job) => job.id === "manual"))
       .toMatchObject({ status: "paused", reason: "Paused manually" });
     scheduler.armScheduledJobs();
@@ -411,7 +411,7 @@ describe("ScheduledOrderScheduler", () => {
     }]);
     scheduler.restore();
     scheduler.armScheduledJobs();
-    expect(scheduler.list()[0]).toMatchObject({ status: "scheduled", reason });
+    expect(scheduler.list()[0]).toMatchObject({ status: "paused", targetAutoPaused: true, reason });
     await clock.advanceTo(job.runAt);
     expect(placeSpy).toHaveBeenCalledTimes(1);
     const nextRun = scheduler.list()[0].runAt;
@@ -964,10 +964,10 @@ describe("ScheduledOrderScheduler", () => {
   });
 
   it.each([
-    [1, "SELL", 1, "SELL", 2, "scheduled"],
-    [-2, "SELL", 1, "BUY", 1, "scheduled"],
-    [-0.5, "SELL", 1, "SELL", 0.5, "scheduled"],
-    [0, "SELL", 1, "SELL", 1, "scheduled"],
+    [1, "SELL", 1, "SELL", 2, "paused"],
+    [-2, "SELL", 1, "BUY", 1, "paused"],
+    [-0.5, "SELL", 1, "SELL", 0.5, "paused"],
+    [0, "SELL", 1, "SELL", 1, "paused"],
     [2, "BUY", 1, "SELL", 2, "scheduled"],
     [-2, "BUY", 1, "BUY", 2, "scheduled"],
   ] as const)(
@@ -1081,10 +1081,12 @@ describe("ScheduledOrderScheduler", () => {
       targetCurrentPosition: 1,
     });
 
-    const [storedEarly, storedLate] = scheduler.list();
-    expect(storedEarly).toMatchObject({ runTime: "03:30", direction: "SELL", size: 2 });
-    expect(storedLate).toMatchObject({ runTime: "05:30", status: "scheduled", reason: undefined });
-    expect(new Date(storedEarly.runAt).toDateString()).toBe(new Date(storedLate.runAt).toDateString());
+    const storedEarly = scheduler.list().find((job) => job.runTime === "03:30")!;
+    const storedLate = scheduler.list().find((job) => job.runTime === "05:30")!;
+    expect(storedEarly).toMatchObject({ status: "paused", targetAutoPaused: true, targetPosition: { leg: "early" } });
+    expect(storedLate).toMatchObject({ direction: "SELL", size: 2, status: "scheduled", targetPosition: { leg: "late" } });
+    expect(storedLate.runAt).toBe(new Date(2026, 2, 23, 5, 30).toISOString());
+    expect(storedEarly.runAt).toBe(new Date(2026, 2, 24, 3, 30).toISOString());
   });
 
   it("edits a paused fixed order without arming it", async () => {
@@ -1214,8 +1216,8 @@ describe("ScheduledOrderScheduler", () => {
     expect(storedLate).toMatchObject({
       direction: "SELL",
       size: 4,
-      status: "scheduled",
-      reason: undefined,
+      status: "paused",
+      targetAutoPaused: true,
       targetPosition: { leg: "late", direction: "SELL", size: 3 },
     });
     expect(storedEarly.targetPosition?.pairId).toBe(storedLate.targetPosition?.pairId);

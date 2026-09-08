@@ -294,6 +294,17 @@ export function SchedulePanel({
                   ) : null}
                   {isPaused || isCancelled ? (
                     <div className="inline-actions">
+                      {isPaused && job.targetAutoPaused ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={loadingPause}
+                          title="Pause automatic checks until manually resumed"
+                          onClick={() => void onPause(job)}
+                        >
+                          Pause
+                        </button>
+                      ) : null}
                       {isPaused ? (
                         <button
                           type="button"

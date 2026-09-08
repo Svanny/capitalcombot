@@ -528,7 +528,7 @@ export function createIpcHandlers({
         let targetCurrentPosition: number | undefined;
         if (input.targetPosition?.enabled) {
           const preferences = await client.getAccountPreferences();
-          if (preferences.hedgingMode) {
+          if (preferences.hedgingMode !== false) {
             throw createAppError(
               "HEDGING_MODE_ENABLED",
               "Disable Capital.com hedging mode before enabling target-position scheduling.",

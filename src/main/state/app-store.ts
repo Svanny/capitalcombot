@@ -388,6 +388,8 @@ function parseScheduledOrderJob(value: unknown): ScheduledOrderJob | null {
     protection,
     lastResolvedProtection: parseResolvedProtection(value.lastResolvedProtection),
     targetPosition,
+    targetAutoPaused: targetPosition && status === "paused" && value.targetAutoPaused === true
+      ? true : undefined,
   };
 }
 

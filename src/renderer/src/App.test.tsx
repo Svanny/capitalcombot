@@ -453,6 +453,29 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
+  it("allows a manual pause of an automatically paused target leg", async () => {
+    const job = {
+      ...connectedBootstrap.schedules[0], status: "paused" as const, targetAutoPaused: true,
+      reason: "No order needed. Live exposure will be checked at the scheduled time.",
+      targetPosition: { pairId: "pair", leg: "late" as const, direction: "SELL" as const, size: 1.33 },
+    };
+    const api = buildApi({ ...connectedBootstrap, schedules: [job] });
+    const paused = [{ ...job, targetAutoPaused: undefined, reason: "Paused manually" }];
+    api.schedules.pause = vi.fn(async () => ({ schedules: paused,
+      result: { action: "schedule" as const, status: "info" as const, message: "Paused manually", at: "2026-03-23T10:00:00.000Z" },
+    }));
+    api.schedules.list = vi.fn().mockResolvedValueOnce([job]).mockResolvedValue(paused);
+    window.capitalApi = api;
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(screen.getByText("paused", { exact: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(api.schedules.pause).toHaveBeenCalledWith({ jobId: job.id }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+  });
+
   it("pauses and reactivates scheduled orders from the portfolio tab", async () => {
     const api = buildApi(connectedBootstrap);
     const pausedSchedules = [

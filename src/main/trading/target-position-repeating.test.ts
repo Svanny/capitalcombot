@@ -75,7 +75,7 @@ it("retries failed targets daily and keeps both satisfied legs active across rel
   await advanceTo(new Date(2026, 8, 8, 5, 30));
   expect(exposure).toBe(-1.33);
   expect(client.openMarketPosition).toHaveBeenCalledTimes(submissions);
-  expect(lateJob()).toMatchObject({ status: "scheduled", reason: expect.stringContaining("already satisfies") });
+  expect(lateJob()).toMatchObject({ status: "paused", targetAutoPaused: true, reason: expect.stringContaining("already satisfies") });
   expect(execute.mock.calls.filter(([job]) => job.id === late.id)).toHaveLength(4);
 
   vi.clearAllTimers();
@@ -86,7 +86,7 @@ it("retries failed targets daily and keeps both satisfied legs active across rel
   const attempts = execute.mock.calls.length;
   await advanceTo(new Date(2026, 8, 9, 4));
   expect(execute).toHaveBeenCalledTimes(attempts + 1);
-  expect(lateJob().status).toBe("scheduled");
+  expect(lateJob()).toMatchObject({ status: "paused", targetAutoPaused: true });
 
   // The next late leg repairs exposure drift without manual reactivation.
   exposure = -0.5;
