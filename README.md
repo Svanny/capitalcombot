@@ -102,6 +102,63 @@ pnpm install
 pnpm dev
 ```
 
+### Command line
+
+Keep `pnpm dev` running in one terminal, then call the same validated operations used by the GUI
+from another terminal:
+
+```bash
+pnpm cli -- status
+pnpm cli -- auth connect-saved --yes
+pnpm cli -- markets search Gold
+pnpm cli -- markets select GOLD
+pnpm cli -- quote
+pnpm cli -- positions list
+pnpm cli -- orders open GOLD --direction BUY --size 0.1 --yes
+pnpm cli -- positions close DEAL_ID --yes
+pnpm cli -- schedules list
+pnpm cli -- target-position enable SCHEDULE_ID --direction BUY --size 1 --yes
+```
+
+Run `pnpm cli -- --help` for every command and option. Results are JSON, so commands can be
+used from scripts. Use `--compact` for one-line output. Actions that place trades or mutate
+positions and schedules prompt in an interactive terminal; automation must opt in explicitly
+with `--yes`.
+
+For a new connection, credentials can be passed as options or environment variables. Environment
+variables avoid putting secrets in shell history:
+
+```bash
+$env:CAPITALCOM_IDENTIFIER = "account-id"
+$env:CAPITALCOM_PASSWORD = "api-password"
+$env:CAPITALCOM_API_KEY = "api-key"
+$env:CAPITALCOM_ENVIRONMENT = "demo"
+pnpm cli -- auth connect
+```
+
+Complex schedule and protection values are JSON:
+
+```bash
+pnpm cli -- orders open GOLD --direction BUY --size 0.1 `
+  --schedule '{"type":"repeating","runTime":"09:30"}' --yes
+
+pnpm cli -- positions protect DEAL_ID --epic GOLD --direction BUY `
+  --protection '{"stopLoss":{"mode":"distance","distance":20},"takeProfit":{"mode":"risk_reward","riskRewardRatio":2}}' --yes
+```
+
+Target-position mode uses either leg's schedule ID and preserves that schedule's existing order,
+timing, and protection settings:
+
+```bash
+pnpm cli -- target-position enable SCHEDULE_ID --direction BUY --size 1 --yes
+pnpm cli -- target-position disable SCHEDULE_ID --yes
+```
+
+The CLI discovers the app through a short-lived file in the operating system's temporary
+directory and connects to a random loopback-only port with a per-run authentication token. It
+does not expose a network-facing API, and saved credential secrets are never included in CLI
+responses.
+
 ### Test
 
 ```bash

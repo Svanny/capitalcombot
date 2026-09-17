@@ -21,6 +21,7 @@
   "scripts": {
     "dev": "electron-vite dev --watch",
     "dev:plain": "electron-vite dev",
+    "cli": "node scripts/cli.mjs",
     "build": "tsc --noEmit && electron-vite build",
     "package:mac": "bash scripts/package-mac.sh",
     "package:linux": "bash scripts/package-linux.sh",

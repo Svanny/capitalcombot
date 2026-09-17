@@ -8,11 +8,13 @@ import { buildExecutionResult, createAppStateStore } from "./state/app-store";
 import { resolveProtection } from "./trading/protection";
 import { ScheduledOrderScheduler } from "./trading/scheduler";
 import { executeTargetPositionJob } from "./trading/target-position-execution";
+import { startCliServer, type CliServer } from "./cli/server";
 
 const client = new CapitalClient();
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
 const iconPath = join(currentDir, "../../gold_die_logo.png");
 const appIcon = nativeImage.createFromPath(iconPath);
+let cliServer: CliServer | null = null;
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -89,12 +91,14 @@ app.whenReady().then(async () => {
     store.appendExecution(buildExecutionResult("auth", "info", appStateBootstrap.warning));
   }
 
-  await registerIpcHandlers({
+  const dependencies = {
     client,
     store,
     credentials: credentials.store,
     scheduler,
-  });
+  };
+  await registerIpcHandlers(dependencies);
+  cliServer = await startCliServer(dependencies);
   createMainWindow();
   const restoredSchedules = scheduler.restore();
   const restoredPendingSchedules = restoredSchedules.filter((job) => job.status === "scheduled");
@@ -114,6 +118,11 @@ app.whenReady().then(async () => {
       createMainWindow();
     }
   });
+});
+
+app.once("before-quit", () => {
+  void cliServer?.close();
+  cliServer = null;
 });
 
 app.on("window-all-closed", () => {
