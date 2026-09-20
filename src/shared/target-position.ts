@@ -103,6 +103,12 @@ export function planTargetTransition(input: TargetTransitionInput): TargetTransi
   }
   const day = input.executionTime.getDay();
 
+  // The Monday early leg precedes the weekly reopening in this overnight pair.
+  // Do not project a short fill here and suppress the pending late entry.
+  if (day === 1 && input.leg === "early" && input.targetDirection === "SELL") {
+    return { kind: "noop", reason: "Monday short target deferred to the late leg after the weekend close." };
+  }
+
   const target = input.targetDirection === "BUY" ? input.targetSize : -input.targetSize;
   let delta = 0;
   let reason = "";

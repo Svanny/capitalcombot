@@ -9,6 +9,7 @@ import { resolveProtection } from "./trading/protection";
 import { ScheduledOrderScheduler } from "./trading/scheduler";
 import { executeTargetPositionJob } from "./trading/target-position-execution";
 import { startCliServer, type CliServer } from "./cli/server";
+import { IPC_CHANNELS } from "../shared/ipc";
 
 const client = new CapitalClient();
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
@@ -98,7 +99,15 @@ app.whenReady().then(async () => {
     scheduler,
   };
   await registerIpcHandlers(dependencies);
-  cliServer = await startCliServer(dependencies);
+  cliServer = await startCliServer(dependencies, {
+    onStateChanged: () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.webContents.isDestroyed()) {
+          window.webContents.send(IPC_CHANNELS.APP_STATE_CHANGED);
+        }
+      }
+    },
+  });
   createMainWindow();
   const restoredSchedules = scheduler.restore();
   const restoredPendingSchedules = restoredSchedules.filter((job) => job.status === "scheduled");

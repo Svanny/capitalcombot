@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BootstrapState, CapitalDesktopApi, MarketSummary, OpenPosition } from "@shared/types";
 import App from "./App";
@@ -124,6 +124,7 @@ function buildApi(
   return {
     app: {
       bootstrap: vi.fn(async () => bootstrap),
+      onStateChanged: vi.fn(() => () => undefined),
     },
     auth: {
       connect: vi.fn(),
@@ -229,8 +230,77 @@ function toLocalDateTimeInput(value: string): string {
 }
 
 describe("App", () => {
+  it.each([false, true])("updates schedule controls and activity after CLI changes (connected=%s)", async (connected) => {
+    const initial = { ...connectedBootstrap, connected };
+    const api = buildApi(initial);
+    let notify: () => void = () => undefined;
+    vi.mocked(api.app.onStateChanged).mockImplementation((listener) => {
+      notify = listener;
+      return () => undefined;
+    });
+    window.capitalApi = api;
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    await screen.findByRole("button", { name: "Pause" });
+    const schedules = [{ ...initial.schedules[0], status: "paused" as const }];
+    const executionLog = [{ action: "schedule" as const, status: "info" as const,
+      message: "CLI paused the order", at: "2026-03-23T12:00:00.000Z" }];
+    vi.mocked(api.app.bootstrap).mockResolvedValue({ ...initial, schedules, executionLog });
+    vi.mocked(api.schedules.list).mockResolvedValue(schedules);
+    await act(async () => notify());
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Trading" }));
+    expect(await screen.findByText("CLI paused the order")).toBeInTheDocument();
+  });
+
+  it("refreshes the GUI on CLI notifications while disconnected and removes its listener", async () => {
+    const api = buildApi(disconnectedBootstrap);
+    let notify: () => void = () => undefined;
+    const unsubscribe = vi.fn();
+    vi.mocked(api.app.onStateChanged).mockImplementation((listener) => {
+      notify = listener;
+      return unsubscribe;
+    });
+    window.capitalApi = api;
+    const view = render(<App />);
+    await screen.findByRole("button", { name: "Connect" });
+    vi.mocked(api.app.bootstrap).mockResolvedValue(connectedBootstrap);
+    vi.mocked(api.positions.listOpen).mockResolvedValue([buildPosition()]);
+    vi.mocked(api.schedules.list).mockResolvedValue(connectedBootstrap.schedules);
+    await act(async () => notify());
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(api.positions.listOpen).toHaveBeenCalledTimes(1);
+    vi.mocked(api.app.bootstrap).mockResolvedValue(disconnectedBootstrap);
+    await act(async () => notify());
+    expect(await screen.findByRole("button", { name: "Connect" })).toBeInTheDocument();
+    view.unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not restore stale positions when a CLI disconnect interrupts a refresh", async () => {
+    const api = buildApi(connectedBootstrap);
+    let notify: () => void = () => undefined;
+    vi.mocked(api.app.onStateChanged).mockImplementation((listener) => {
+      notify = listener;
+      return () => undefined;
+    });
+    let finishPositions!: (positions: OpenPosition[]) => void;
+    vi.mocked(api.positions.listOpen).mockReturnValueOnce(new Promise((resolve) => { finishPositions = resolve; }));
+    window.capitalApi = api;
+    render(<App />);
+    await waitFor(() => expect(api.positions.listOpen).toHaveBeenCalled());
+    vi.mocked(api.app.bootstrap).mockResolvedValue(disconnectedBootstrap);
+    await act(async () => notify());
+    await act(async () => finishPositions([buildPosition()]));
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Portfolio" }));
+    expect(screen.queryByText("deal-1")).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, "", "/");
     vi.stubGlobal("confirm", vi.fn(() => true));
   });
 

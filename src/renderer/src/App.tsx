@@ -58,6 +58,7 @@ const EMPTY_BOOTSTRAP: BootstrapState = {
 
 export default function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapState>(EMPTY_BOOTSTRAP);
+  const refreshVersion = useRef(0);
   const [positions, setPositions] = useState<OpenPosition[]>([]);
   const [quote, setQuote] = useState<QuoteSnapshot | null>(null);
   const [marketResults, setMarketResults] = useState<MarketSummary[]>([]);
@@ -158,7 +159,14 @@ export default function App() {
   };
 
   useEffect(() => {
+    const unsubscribe = window.capitalApi.app.onStateChanged(() => {
+      void refreshConnectedData();
+    });
     void hydrate();
+    return () => {
+      unsubscribe();
+      refreshVersion.current += 1;
+    };
   }, []);
 
   useEffect(() => {
@@ -403,11 +411,7 @@ export default function App() {
     setLoadingState((current) => ({ ...current, bootstrap: true }));
 
     try {
-      const state = await window.capitalApi.app.bootstrap();
-      applyBootstrap(state);
-      if (state.connected) {
-        await refreshConnectedData(state);
-      }
+      await refreshConnectedData();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -416,22 +420,25 @@ export default function App() {
   }
 
   async function refreshConnectedData(baseState?: BootstrapState): Promise<void> {
-    const state = baseState ?? (await window.capitalApi.app.bootstrap());
-    applyBootstrap(state);
-
-    if (!state.connected) {
-      setPositions([]);
-      setQuote(null);
-      return;
-    }
-
+    const version = ++refreshVersion.current;
     try {
+      const state = baseState ?? (await window.capitalApi.app.bootstrap());
+      if (version !== refreshVersion.current) return;
+      applyBootstrap(state);
+
+      if (!state.connected) {
+        setPositions([]);
+        setQuote(null);
+        return;
+      }
+
       const [nextPositions, nextQuote, nextSchedules] = await Promise.all([
         window.capitalApi.positions.listOpen(),
         state.selectedMarket ? window.capitalApi.quotes.getSelected() : Promise.resolve(null),
         window.capitalApi.schedules.list(),
       ]);
 
+      if (version !== refreshVersion.current) return;
       setPositions(nextPositions);
       setQuote(nextQuote);
       setBootstrap((current) => ({
@@ -439,6 +446,7 @@ export default function App() {
         schedules: nextSchedules,
       }));
     } catch (error) {
+      if (version !== refreshVersion.current) return;
       setErrorMessage(getErrorMessage(error));
     }
   }

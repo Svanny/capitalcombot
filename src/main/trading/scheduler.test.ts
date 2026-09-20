@@ -881,7 +881,7 @@ describe("ScheduledOrderScheduler", () => {
       direction: "BUY",
       size: 1,
       type: "one-off",
-      runAt: "2026-03-23T10:30:00.000Z",
+      runAt: "2026-03-24T10:30:00.000Z",
     });
     const late = scheduler.schedule({
       epic: "XAUUSD",
@@ -889,7 +889,7 @@ describe("ScheduledOrderScheduler", () => {
       direction: "SELL",
       size: 4,
       type: "one-off",
-      runAt: "2026-03-23T11:30:00.000Z",
+      runAt: "2026-03-24T11:30:00.000Z",
     });
     scheduler.pause(late.id);
 
@@ -897,7 +897,7 @@ describe("ScheduledOrderScheduler", () => {
       direction: "SELL",
       size: 3,
       type: "one-off",
-      runAt: "2026-03-23T10:30:00.000Z",
+      runAt: "2026-03-24T10:30:00.000Z",
       protection: null,
       targetPosition: { enabled: true, direction: "SELL", size: 3 },
       targetCurrentPosition: 0,
@@ -920,7 +920,7 @@ describe("ScheduledOrderScheduler", () => {
     });
     expect(storedEarly.targetPosition?.pairId).toBe(storedLate.targetPosition?.pairId);
 
-    await clock.advanceTo("2026-03-23T11:31:00.000Z");
+    await clock.advanceTo("2026-03-24T11:31:00.000Z");
     expect(placeSpy).toHaveBeenCalledTimes(1);
     expect(placeSpy).toHaveBeenCalledWith(expect.objectContaining({ id: early.id }));
   });

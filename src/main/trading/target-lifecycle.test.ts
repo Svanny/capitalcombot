@@ -73,7 +73,9 @@ describe("target lifecycle matrix", () => {
             const context = setup(day, initial, oneOff);
             context.save(direction);
             const target = direction === "BUY" ? 1.33 : -1.33;
-            const earlyExposure = new Date(2026, 8, day).getDay() === 6 || direction === "BUY" ? 0 : target;
+            const weekday = new Date(2026, 8, day).getDay();
+            const earlyExposure = weekday === 1 && direction === "SELL" ? initial
+              : weekday === 6 || direction === "BUY" ? 0 : target;
             expect(context.get(context.early.id).status).toBe(initial === earlyExposure ? "paused" : "scheduled");
             expect(context.get(context.late.id).status).toBe(earlyExposure === target ? "paused" : "scheduled");
             context.reload();
@@ -101,6 +103,32 @@ describe("target lifecycle matrix", () => {
     context.save("BUY", 2);
     context.reload();
     expect(context.get(context.late.id)).toMatchObject({ status: "paused", targetAutoPaused: undefined });
+  });
+
+  it.each([-2, -1.33, 0, 2])("saves a Sunday short for Monday late across restart from exposure %s", async (initial) => {
+    const context = setup(6, initial);
+    // Configure after both Sunday occurrences, while the market is closed.
+    vi.clearAllTimers();
+    vi.setSystemTime(new Date(2026, 8, 6, 12));
+    context.save("SELL");
+    expect(context.get(context.early.id)).toMatchObject({
+      status: "paused", targetAutoPaused: true,
+      reason: expect.stringContaining("Monday short target deferred"),
+    });
+    expect(context.get(context.late.id)).toMatchObject({
+      status: initial === -1.33 ? "paused" : "scheduled",
+      runAt: new Date(2026, 8, 7, 5, 30).toISOString(),
+    });
+    context.reload();
+    await context.advance(7, 3);
+    expect(context.client.openMarketPosition).not.toHaveBeenCalled();
+    expect(context.exposure).toBe(initial);
+    await context.advance(7, 5);
+    expect(context.exposure).toBe(-1.33);
+    expect(context.client.openMarketPosition).toHaveBeenCalledTimes(initial === -1.33 ? 0 : 1);
+    await context.advance(8, 5);
+    expect(context.exposure).toBe(-1.33);
+    expect(context.client.openMarketPosition).toHaveBeenCalledTimes(initial === -1.33 ? 0 : 1);
   });
 
   it("a manual Pause on an automatic pause disables its future checks", async () => {

@@ -26,6 +26,7 @@ export interface CliServer {
 
 export interface CliServerOptions {
   runtimeFilePath?: string;
+  onStateChanged?: () => void;
 }
 
 export function getCliRuntimeFilePath(workspace = process.cwd()): string {
@@ -41,6 +42,25 @@ export function getCliRuntimeFilePath(workspace = process.cwd()): string {
 }
 
 export async function executeCliRequest(
+  dependencies: IpcDependencies,
+  request: Pick<CliRequest, "method" | "input" | "confirmed">,
+  onStateChanged?: () => void,
+): Promise<unknown> {
+  const readOnlyMethods = [
+    "app.bootstrap", "markets.searchGold", "quotes.getSelected",
+    "positions.listOpen", "orders.previewProtection", "schedules.list",
+  ];
+  try {
+    return await dispatchCliRequest(dependencies, request);
+  } finally {
+    // A failed command can still have changed state before the failure.
+    if (CLI_METHODS.includes(request.method as CliMethod) && !readOnlyMethods.includes(request.method)) {
+      onStateChanged?.();
+    }
+  }
+}
+
+async function dispatchCliRequest(
   dependencies: IpcDependencies,
   request: Pick<CliRequest, "method" | "input" | "confirmed">,
 ): Promise<unknown> {
@@ -178,7 +198,7 @@ export async function startCliServer(
 ): Promise<CliServer> {
   const token = randomBytes(32).toString("hex");
   const runtimeFilePath = options.runtimeFilePath ?? getCliRuntimeFilePath();
-  const server = createServer((socket) => handleConnection(socket, token, dependencies));
+  const server = createServer((socket) => handleConnection(socket, token, dependencies, options.onStateChanged));
 
   await listen(server);
   const address = server.address();
@@ -221,7 +241,7 @@ export async function startCliServer(
   };
 }
 
-function handleConnection(socket: Socket, token: string, dependencies: IpcDependencies): void {
+function handleConnection(socket: Socket, token: string, dependencies: IpcDependencies, onStateChanged?: () => void): void {
   socket.setEncoding("utf8");
   socket.setTimeout(30_000, () => socket.destroy());
   socket.on("error", () => undefined);
@@ -243,7 +263,7 @@ function handleConnection(socket: Socket, token: string, dependencies: IpcDepend
     handled = true;
     const line = payload.slice(0, newline);
     payload = "";
-    void processLine(line, token, dependencies).then((response) => sendResponse(socket, response));
+    void processLine(line, token, dependencies, onStateChanged).then((response) => sendResponse(socket, response));
   });
 }
 
@@ -251,6 +271,7 @@ async function processLine(
   line: string,
   token: string,
   dependencies: IpcDependencies,
+  onStateChanged?: () => void,
 ): Promise<CliResponse> {
   let request: CliRequest;
   try {
@@ -268,7 +289,7 @@ async function processLine(
     return {
       id,
       ok: true,
-      result: await executeCliRequest(dependencies, request),
+      result: await executeCliRequest(dependencies, request, onStateChanged),
     };
   } catch (error) {
     const normalized = parseHandlerError(error);

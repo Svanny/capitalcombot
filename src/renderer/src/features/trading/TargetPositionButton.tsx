@@ -245,7 +245,8 @@ export function TargetPositionButton({ loading, onSubmit, schedules }: TargetPos
               </fieldset>
 
               <p className="target-position-policy-note">
-                Long targets flatten early and enter late. Short targets execute early; the late leg checks live
+                Long targets flatten early and enter late. Short targets execute early except on Monday, when
+                entry waits for the late leg after the weekend close. The late leg checks live
                 exposure again and corrects any remaining difference. Saturday’s early leg flattens at the Friday
                 close. Repeating schedules run daily, including weekends, and try again at their next scheduled time
                 after a failure. Unused legs pause automatically and check live exposure at their scheduled time.

@@ -7,8 +7,15 @@ and the broker's live net exposure, fetched separately for each execution.
 | Local schedule day | Target | Early required exposure | Late required exposure |
 | --- | --- | --- | --- |
 | Sunday–Friday | Long | Zero | Positive target size |
-| Sunday–Friday | Short | Negative target size | Negative target size |
+| Sunday, Tuesday-Friday | Short | Negative target size | Negative target size |
+| Monday | Short | Unchanged (auto-paused) | Negative target size |
 | Saturday (Friday overnight close) | Either | Zero | Signed target size |
+
+On Monday, short targets leave exposure unchanged at the early leg and adjust
+to the short target at the late leg, after the weekend reopening. Saving on Sunday
+therefore auto-pauses Monday's early leg and keeps the late adjustment scheduled
+instead of projecting a fill during the closed 03:30 occurrence. This uses the
+existing automatic-pause behavior; configured leg times remain unchanged.
 
 The late short check recovers an earlier failure or intervening position change.
 If the market is closed, the broker rejection is recorded and a repeating job

@@ -59,6 +59,25 @@ function createDependencies(): IpcDependencies {
 }
 
 describe("CLI server", () => {
+  it("notifies the GUI after mutations, including commands that fail after changing state", async () => {
+    const dependencies = createDependencies();
+    const directory = await mkdtemp(join(tmpdir(), "capitalcombot-cli-test-"));
+    const onStateChanged = vi.fn();
+    const server = await startCliServer(dependencies, {
+      runtimeFilePath: join(directory, "connection.json"), onStateChanged,
+    });
+    activeServers.push(server);
+    const request = { id: "sync", token: server.connection.token, method: "auth.disconnect" };
+    expect(await send(server, request)).toMatchObject({ ok: true });
+    expect(onStateChanged).toHaveBeenCalledTimes(1);
+    await send(server, { ...request, method: "app.bootstrap" });
+    await send(server, { ...request, token: "invalid" });
+    expect(onStateChanged).toHaveBeenCalledTimes(1);
+    vi.mocked(dependencies.client.disconnect).mockRejectedValueOnce(new Error("disconnect failed"));
+    expect(await send(server, request)).toMatchObject({ ok: false });
+    expect(onStateChanged).toHaveBeenCalledTimes(2);
+  });
+
   it("routes commands through the existing validated handlers", async () => {
     const dependencies = createDependencies();
     const state = await executeCliRequest(dependencies, { method: "app.bootstrap" });

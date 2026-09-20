@@ -46,6 +46,11 @@ function parseAppError(error: unknown): AppError {
 const api: CapitalDesktopApi = {
   app: {
     bootstrap: () => invoke(IPC_CHANNELS.APP_BOOTSTRAP),
+    onStateChanged: (listener) => {
+      const handleChange = () => listener();
+      ipcRenderer.on(IPC_CHANNELS.APP_STATE_CHANGED, handleChange);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.APP_STATE_CHANGED, handleChange);
+    },
   },
   auth: {
     connect: (credentials: CapitalCredentials) => invoke(IPC_CHANNELS.AUTH_CONNECT, credentials),

@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = {
   APP_BOOTSTRAP: "app.bootstrap",
+  APP_STATE_CHANGED: "app.stateChanged",
   AUTH_CONNECT: "auth.connect",
   AUTH_CONNECT_SAVED: "auth.connectSaved",
   AUTH_DISCONNECT: "auth.disconnect",

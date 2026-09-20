@@ -276,6 +276,7 @@ export interface UpdatePositionProtectionResponse {
 export interface CapitalDesktopApi {
   app: {
     bootstrap: () => Promise<BootstrapState>;
+    onStateChanged: (listener: () => void) => () => void;
   };
   auth: {
     connect: (credentials: CapitalCredentials) => Promise<AuthResponse>;
