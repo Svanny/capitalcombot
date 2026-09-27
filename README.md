@@ -102,7 +102,7 @@ pnpm install
 pnpm dev
 ```
 
-The development window opens in full screen. Use your operating system's full-screen shortcut to leave it.
+The development window opens maximized.
 
 ### Command line
 

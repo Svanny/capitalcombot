@@ -21,7 +21,6 @@ function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
     height: 980,
-    fullscreen: Boolean(process.env.ELECTRON_RENDERER_URL),
     minWidth: 1180,
     minHeight: 760,
     backgroundColor: "#091215",
@@ -40,6 +39,7 @@ function createMainWindow(): BrowserWindow {
   }
 
   if (process.env.ELECTRON_RENDERER_URL) {
+    window.maximize();
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
     void window.loadFile(join(currentDir, "../renderer/index.html"));
