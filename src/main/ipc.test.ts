@@ -213,6 +213,32 @@ function createMockScheduler(): SchedulerLike {
 }
 
 describe("createIpcHandlers", () => {
+  it("preserves password whitespace through validation and credential storage", async () => {
+    const client = createMockClient();
+    const credentials = new MemoryCredentialStore();
+    const handlers = createIpcHandlers({ client, credentials, store: new MemoryAppStateStore(), scheduler: createMockScheduler() });
+    await handlers.connect({ identifier: "account", password: " secret ", apiKey: "key", environment: "demo" });
+    expect(client.connect).toHaveBeenCalledWith(expect.objectContaining({ password: " secret " }));
+    expect(await credentials.load()).toMatchObject({ password: " secret " });
+  });
+
+  it("does not let an old quote overwrite a market selected through another handler", async () => {
+    const client = createMockClient();
+    const store = new MemoryAppStateStore();
+    const dependencies = { client, store, credentials: new MemoryCredentialStore(), scheduler: createMockScheduler() };
+    const gui = createIpcHandlers(dependencies);
+    const cli = createIpcHandlers(dependencies);
+    await gui.selectMarket("XAUUSD");
+    let finishQuote!: (quote: QuoteSnapshot) => void;
+    vi.mocked(client.getQuote).mockReturnValueOnce(new Promise((resolve) => { finishQuote = resolve; }));
+    const pending = gui.getSelectedQuote();
+    const silver = { ...(await client.getMarketDetails("XAUUSD")), epic: "SILVER", instrumentName: "Silver" };
+    vi.mocked(client.getMarketDetails).mockResolvedValueOnce(silver);
+    await cli.selectMarket("SILVER");
+    finishQuote({ ...silver, epic: "XAUUSD", bid: 999 });
+    expect(await pending).toBeNull();
+    expect(store.getState().selectedMarket).toEqual(silver);
+  });
   it("connects, saves credentials, and returns bootstrap state", async () => {
     const store = new MemoryAppStateStore();
     const credentials = new MemoryCredentialStore();
@@ -583,6 +609,7 @@ describe("createIpcHandlers", () => {
 
   it("updates position protection from a resolved strategy", async () => {
     const client = createMockClient();
+    vi.mocked(client.listPositions).mockResolvedValue([buildOpenPosition()]);
     const handlers = createIpcHandlers({
       client,
       store: new MemoryAppStateStore(),
@@ -609,6 +636,21 @@ describe("createIpcHandlers", () => {
     );
     expect(response.position?.stopLevel).not.toBeNull();
     expect(response.position?.profitLevel).not.toBeNull();
+  });
+
+  it.each([
+    { epic: "SILVER", direction: "BUY" },
+    { epic: "XAUUSD", direction: "SELL" },
+    { epic: "XAUUSD", direction: "BUY", missing: true },
+  ])("rejects protection updates for a mismatched or missing position %j", async ({ epic, direction, missing }) => {
+    const client = createMockClient();
+    vi.mocked(client.listPositions).mockResolvedValue(missing ? [] : [buildOpenPosition()]);
+    const handlers = createIpcHandlers({ client, store: new MemoryAppStateStore(),
+      credentials: new MemoryCredentialStore(), scheduler: createMockScheduler() });
+    await expect(handlers.updatePositionProtection({ dealId: "deal-1", epic, direction,
+      protection: { stopLoss: { mode: "distance", distance: 10 }, takeProfit: { mode: "none" } },
+    })).rejects.toThrow(missing ? "POSITION_NOT_FOUND" : "POSITION_CHANGED");
+    expect(client.updatePositionProtection).not.toHaveBeenCalled();
   });
 
   it("rejects invalid renderer payloads before they reach privileged order actions", async () => {

@@ -1,5 +1,5 @@
 export function formatNumber(value: number | null | undefined): string {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return "—";
   }
 
@@ -9,6 +9,8 @@ export function formatNumber(value: number | null | undefined): string {
 }
 
 export function formatCurrency(value: number, currency: string): string {
+  if (!Number.isFinite(value)) return formatNumber(null);
+  if (!/^[a-z]{3}$/i.test(currency)) return formatNumber(value);
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
@@ -17,7 +19,7 @@ export function formatCurrency(value: number, currency: string): string {
 }
 
 export function formatPercent(value: number | null | undefined): string {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return "—";
   }
 

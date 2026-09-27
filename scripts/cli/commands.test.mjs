@@ -2,6 +2,44 @@ import { describe, expect, it } from "vitest";
 import { parseCommand } from "./commands.mjs";
 
 describe("CLI command parsing", () => {
+  it.each([
+    ["status", "app.bootstrap"], ["quote", "quotes.getSelected"],
+    ["auth connect-saved", "auth.connectSaved"], ["auth disconnect", "auth.disconnect"],
+    ["auth forget-saved", "auth.forgetSaved"], ["markets search Spot Gold", "markets.searchGold"],
+    ["markets select GOLD", "markets.select"], ["positions list", "positions.listOpen"],
+    ["positions close deal", "positions.close"], ["positions reverse deal", "positions.reverse"],
+    ["positions protect deal --epic GOLD --direction BUY --protection {}", "positions.updateProtection"],
+    ["orders open GOLD --direction BUY --size 1 --schedule {} --protection {}", "orders.openMarket"],
+    ["orders preview GOLD --direction BUY --protection {}", "orders.previewProtection"],
+    ["schedules list", "schedules.list"], ["schedules cancel job", "schedules.cancel"],
+    ["schedules pause job", "schedules.pause"], ["schedules reactivate job", "schedules.reactivate"],
+    ["schedules update job --direction BUY --size 1 --schedule {} --protection {} --target-position {}", "schedules.update"],
+  ])("accepts documented command shape: %s", (command, method) => {
+    expect(parseCommand([...command.split(" "), "--compact", "-y"])).toMatchObject({ method, compact: true, assumeYes: true });
+  });
+
+  it.each([
+    ["orders", "open", "GOLD", "--direction", "BUY", "--size", "1", "--schedul", "{}"],
+    ["positions", "close", "deal-1", "deal-2", "--yes"],
+    ["positions", "list", "--size", "2"],
+    ["status", "--yes=false"],
+    ["status", "--compact=false"],
+    ["status", "--help=false"],
+    ["orders", "open", "GOLD", "--direction", "BUY", "--size", "1", "--size", "2"],
+    ["status", "--__proto__", "x"],
+    ["status", "--constructor", "x"],
+    ["status", "-z"],
+    ["auth", "disconnect", "extra"],
+    ["call", "positions.close", "extra", "--input", "{}"],
+  ])("rejects ambiguous or ignored arguments: %j", (...argv) => {
+    expect(() => parseCommand(argv)).toThrow();
+  });
+
+  it("preserves password whitespace", () => {
+    expect(parseCommand(["auth", "connect"], {
+      CAPITALCOM_IDENTIFIER: "account", CAPITALCOM_PASSWORD: " secret ", CAPITALCOM_API_KEY: "key",
+    }).input.password).toBe(" secret ");
+  });
   it("maps a market order to the shared app operation", () => {
     expect(
       parseCommand([

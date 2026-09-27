@@ -70,7 +70,7 @@ function isProtectionEmpty(protection: ProtectionStrategy): boolean {
 function getReferencePrice(quote: QuoteSnapshot, direction: TradeDirection): number {
   const reference = direction === "BUY" ? quote.ask ?? quote.bid : quote.bid ?? quote.ask;
 
-  if (!reference || !Number.isFinite(reference)) {
+  if (!reference || !Number.isFinite(reference) || reference <= 0) {
     throw new Error("A live market quote is required to calculate stop loss and take profit.");
   }
 
@@ -207,6 +207,9 @@ function assertDirectionalValidity(
   stopLevel: number | null,
   profitLevel: number | null,
 ): void {
+  for (const level of [stopLevel, profitLevel]) {
+    if (level !== null) requirePositive(level, "Calculated protection levels must be finite and greater than 0.");
+  }
   if (direction === "BUY") {
     if (stopLevel !== null && stopLevel >= referencePrice) {
       throw new Error("For BUY orders, the stop loss must be below the market price.");

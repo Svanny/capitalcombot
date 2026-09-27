@@ -230,6 +230,58 @@ function toLocalDateTimeInput(value: string): string {
 }
 
 describe("App", () => {
+  it("lets a slow refresh finish instead of superseding it at every poll", async () => {
+    vi.useFakeTimers();
+    const api = buildApi(connectedBootstrap);
+    vi.mocked(api.positions.listOpen).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve([buildPosition()]), 10_000);
+    }));
+    window.capitalApi = api;
+    const view = render(<App />);
+    try {
+      await act(async () => {});
+      fireEvent.click(screen.getByRole("link", { name: "Portfolio" }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      expect(api.positions.listOpen).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("deal-1")).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+  it.each(["quote", "schedules"])("still refreshes positions when %s refresh fails", async (failing) => {
+    const api = buildApi(connectedBootstrap, { positions: [buildPosition()] });
+    if (failing === "quote") vi.mocked(api.quotes.getSelected).mockRejectedValue(new Error("Quote unavailable"));
+    else vi.mocked(api.schedules.list).mockRejectedValue(new Error("Schedules unavailable"));
+    window.capitalApi = api;
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    expect(await screen.findByText("deal-1")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("unavailable");
+  });
+
+  it.each(["", "$", "USDT"])("keeps the portfolio usable with invalid broker currency %j", async (currency) => {
+    window.capitalApi = buildApi(connectedBootstrap, { positions: [buildPosition({ currency })] });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Portfolio" }));
+    expect(await screen.findByRole("button", { name: "Close position deal-1" })).toBeInTheDocument();
+  });
+
+  it("does not restore stale positions after a GUI disconnect", async () => {
+    const api = buildApi(connectedBootstrap);
+    let finishPositions!: (positions: OpenPosition[]) => void;
+    vi.mocked(api.positions.listOpen).mockReturnValueOnce(new Promise((resolve) => { finishPositions = resolve; }));
+    vi.mocked(api.auth.disconnect).mockResolvedValue({ state: disconnectedBootstrap,
+      result: { action: "auth", status: "info", message: "Disconnected", at: "2026-03-23T10:00:00.000Z" } });
+    window.capitalApi = api;
+    render(<App />);
+    await waitFor(() => expect(api.positions.listOpen).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await screen.findByRole("button", { name: "Connect" });
+    await act(async () => finishPositions([buildPosition()]));
+    fireEvent.click(screen.getByRole("link", { name: "Portfolio" }));
+    expect(screen.queryByText("deal-1")).not.toBeInTheDocument();
+  });
   it.each([false, true])("updates schedule controls and activity after CLI changes (connected=%s)", async (connected) => {
     const initial = { ...connectedBootstrap, connected };
     const api = buildApi(initial);
@@ -632,9 +684,9 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Cancelled (1)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Reactivate" }));
 
-    expect(
-      await screen.findByText("Edit this one-off scheduled order to a future time before reactivating it."),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Edit this one-off scheduled order to a future time before reactivating it.",
+    );
   });
 
   it("prefills and saves scheduled order edits from the portfolio tab", async () => {

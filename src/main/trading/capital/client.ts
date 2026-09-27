@@ -68,6 +68,7 @@ interface PricesResponse {
 }
 
 type FetchLike = typeof fetch;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const BASE_URLS: Record<TradingEnvironment, string> = {
   demo: "https://demo-api-capital.backend-capital.com",
@@ -77,6 +78,8 @@ const BASE_URLS: Record<TradingEnvironment, string> = {
 export class CapitalClient {
   private session: SessionTokens | null = null;
   private credentials: CapitalCredentials | null = null;
+  private sessionVersion = 0;
+  private pendingSession: Promise<void> | null = null;
 
   constructor(private readonly fetchImpl: FetchLike = fetch) {}
 
@@ -84,7 +87,17 @@ export class CapitalClient {
     return Boolean(this.session && this.session.expiresAt > Date.now());
   }
 
-  async connect(credentials: CapitalCredentials): Promise<void> {
+  connect(credentials: CapitalCredentials): Promise<void> {
+    const pending = this.startSession(credentials, ++this.sessionVersion);
+    this.pendingSession = pending;
+    const clearPending = () => {
+      if (this.pendingSession === pending) this.pendingSession = null;
+    };
+    void pending.then(clearPending, clearPending);
+    return pending;
+  }
+
+  private async startSession(credentials: CapitalCredentials, version: number): Promise<void> {
     const normalized = {
       ...credentials,
       identifier: credentials.identifier.trim(),
@@ -92,6 +105,7 @@ export class CapitalClient {
     };
     const response = await this.fetchImpl(this.buildUrl(normalized.environment, "/api/v1/session"), {
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         "Content-Type": "application/json",
         "X-CAP-API-KEY": normalized.apiKey,
@@ -114,6 +128,9 @@ export class CapitalClient {
       throw createAppError("AUTH_HEADERS_MISSING", "Capital.com did not return session headers.");
     }
 
+    if (version !== this.sessionVersion) {
+      throw createAppError("SESSION_CHANGED", "The connection changed while signing in. Retry using the current session.", true);
+    }
     this.credentials = normalized;
     this.session = {
       cst,
@@ -123,15 +140,19 @@ export class CapitalClient {
   }
 
   async disconnect(): Promise<void> {
-    if (this.session && this.credentials) {
-      await this.fetchImpl(this.buildUrl(this.credentials.environment, "/api/v1/session"), {
-        method: "DELETE",
-        headers: this.buildAuthenticatedHeaders(),
-      }).catch(() => undefined);
-    }
-
+    const session = this.session;
+    const credentials = this.credentials;
+    this.sessionVersion += 1;
+    this.pendingSession = null;
     this.session = null;
     this.credentials = null;
+    if (session && credentials) {
+      await this.fetchImpl(this.buildUrl(credentials.environment, "/api/v1/session"), {
+        method: "DELETE",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { CST: session.cst, "X-SECURITY-TOKEN": session.securityToken },
+      }).catch(() => undefined);
+    }
   }
 
   async searchGoldMarkets(query: string): Promise<MarketSummary[]> {
@@ -408,9 +429,13 @@ export class CapitalClient {
     init?: RequestInit,
   ): Promise<T> {
     await this.ensureSession();
+    if (!this.credentials || !this.session) {
+      throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
+    }
 
-    const response = await this.fetchImpl(this.buildUrl(this.credentials!.environment, path, params), {
+    const response = await this.fetchImpl(this.buildUrl(this.credentials.environment, path, params), {
       ...init,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...this.buildAuthenticatedHeaders(),
@@ -426,6 +451,10 @@ export class CapitalClient {
   }
 
   private async ensureSession(): Promise<void> {
+    if (this.pendingSession) {
+      await this.pendingSession;
+      return;
+    }
     if (!this.credentials) {
       throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
     }

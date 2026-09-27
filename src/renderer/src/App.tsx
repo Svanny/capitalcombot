@@ -59,6 +59,7 @@ const EMPTY_BOOTSTRAP: BootstrapState = {
 export default function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapState>(EMPTY_BOOTSTRAP);
   const refreshVersion = useRef(0);
+  const pendingRefreshes = useRef(0);
   const [positions, setPositions] = useState<OpenPosition[]>([]);
   const [quote, setQuote] = useState<QuoteSnapshot | null>(null);
   const [marketResults, setMarketResults] = useState<MarketSummary[]>([]);
@@ -186,7 +187,7 @@ export default function App() {
     }
 
     const interval = window.setInterval(() => {
-      void refreshConnectedData();
+      if (pendingRefreshes.current === 0) void refreshConnectedData();
     }, Math.min(QUOTE_POLL_MS, POSITIONS_POLL_MS));
 
     return () => {
@@ -421,6 +422,7 @@ export default function App() {
 
   async function refreshConnectedData(baseState?: BootstrapState): Promise<void> {
     const version = ++refreshVersion.current;
+    pendingRefreshes.current += 1;
     try {
       const state = baseState ?? (await window.capitalApi.app.bootstrap());
       if (version !== refreshVersion.current) return;
@@ -432,22 +434,31 @@ export default function App() {
         return;
       }
 
-      const [nextPositions, nextQuote, nextSchedules] = await Promise.all([
+      const [nextPositions, nextQuote, nextSchedules] = await Promise.allSettled([
         window.capitalApi.positions.listOpen(),
         state.selectedMarket ? window.capitalApi.quotes.getSelected() : Promise.resolve(null),
         window.capitalApi.schedules.list(),
       ]);
 
       if (version !== refreshVersion.current) return;
-      setPositions(nextPositions);
-      setQuote(nextQuote);
-      setBootstrap((current) => ({
-        ...current,
-        schedules: nextSchedules,
-      }));
+      if (nextPositions.status === "fulfilled") setPositions(nextPositions.value);
+      if (nextQuote.status === "fulfilled") {
+        setQuote(nextQuote.value?.epic === state.selectedMarket?.epic ? nextQuote.value : null);
+      } else {
+        setQuote(null);
+      }
+      if (nextSchedules.status === "fulfilled") {
+        setBootstrap((current) => ({ ...current, schedules: nextSchedules.value }));
+      }
+      const failures = [nextPositions, nextQuote, nextSchedules]
+        .filter((result) => result.status === "rejected")
+        .map((result) => getErrorMessage(result.reason));
+      if (failures.length) setErrorMessage(failures.join(" "));
     } catch (error) {
       if (version !== refreshVersion.current) return;
       setErrorMessage(getErrorMessage(error));
+    } finally {
+      pendingRefreshes.current -= 1;
     }
   }
 
@@ -508,11 +519,13 @@ export default function App() {
   }
 
   async function handleDisconnect(): Promise<void> {
+    refreshVersion.current += 1;
     setLoadingState((current) => ({ ...current, auth: true }));
     setErrorMessage(null);
 
     try {
       const response = await window.capitalApi.auth.disconnect();
+      refreshVersion.current += 1;
       setStatusMessage(response.result.message);
       setQuote(null);
       setPositions([]);
@@ -1122,6 +1135,7 @@ export default function App() {
 
               {activeTab === "positions" ? (
                 <div className="tab-stack portfolio-stack">
+                  {errorMessage ? <div className="status-banner error" role="alert">{errorMessage}</div> : null}
                   <PositionsPanel
                     onEditProtection={handleEditProtection}
                     loadingPositions={loadingState.positions}

@@ -280,6 +280,7 @@ export function createIpcHandlers({
 
       try {
         const quote = await client.getQuote(selected.epic);
+        if (store.getState().selectedMarket?.epic !== selected.epic) return null;
         store.patchState({
           selectedMarket: {
             ...selected,
@@ -416,6 +417,13 @@ export function createIpcHandlers({
     ): Promise<UpdatePositionProtectionResponse> => {
       try {
         const input = validateUpdatePositionProtectionInput(unsafeInput);
+        const current = (await client.listPositions()).find((position) => position.dealId === input.dealId);
+        if (!current) {
+          throw createAppError("POSITION_NOT_FOUND", "The position is no longer open. Refresh the portfolio.", true);
+        }
+        if (current.epic !== input.epic || current.direction !== input.direction) {
+          throw createAppError("POSITION_CHANGED", "The position market or direction changed. Refresh it before updating protection.", true);
+        }
         const resolvedProtection = await resolveProtection(client, {
           epic: input.epic,
           direction: input.direction,
@@ -612,7 +620,8 @@ function validateCapitalCredentials(value: unknown): CapitalCredentials {
     object.identifier,
     "Enter your Capital.com account identifier.",
   );
-  const password = validateIdentifierString(object.password, "Enter your Capital.com password.");
+  validateIdentifierString(object.password, "Enter your Capital.com password.");
+  const password = object.password as string;
   const apiKey = validateIdentifierString(object.apiKey, "Enter your Capital.com API key.");
   const environment = object.environment === "live" ? "live" : object.environment === "demo" ? "demo" : null;
 

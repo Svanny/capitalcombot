@@ -30,6 +30,14 @@ function buildBar(index: number): HistoricalPriceBar {
 }
 
 describe("resolveProtection", () => {
+  it.each([
+    { direction: "BUY" as const, stopLoss: { mode: "distance" as const, distance: 4000 }, takeProfit: { mode: "none" as const } },
+    { direction: "SELL" as const, stopLoss: { mode: "none" as const }, takeProfit: { mode: "distance" as const, distance: 4000 } },
+    { direction: "BUY" as const, stopLoss: { mode: "distance" as const, distance: 10 }, takeProfit: { mode: "risk_reward" as const, riskRewardRatio: Number.MAX_VALUE } },
+    { direction: "SELL" as const, stopLoss: { mode: "adx_distance" as const, adxMultiplier: Number.MAX_VALUE }, takeProfit: { mode: "none" as const } },
+  ])("rejects unrepresentable or non-positive calculated levels: %j", async ({ direction, ...protection }) => {
+    await expect(resolveProtection(createClient(), { epic: "XAUUSD", direction, protection })).rejects.toThrow();
+  });
   it("derives stop loss and take profit from distance and risk/reward", async () => {
     const resolved = await resolveProtection(createClient(), {
       epic: "XAUUSD",
@@ -56,8 +64,8 @@ describe("resolveProtection", () => {
       epic: "XAUUSD",
       direction: "SELL",
       protection: {
-        stopLoss: { mode: "adx_distance", adxMultiplier: 1.5 },
-        takeProfit: { mode: "adx_distance", adxMultiplier: 2 },
+        stopLoss: { mode: "adx_distance", adxMultiplier: 0.15 },
+        takeProfit: { mode: "adx_distance", adxMultiplier: 0.2 },
       },
     });
 

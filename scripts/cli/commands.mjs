@@ -1,3 +1,5 @@
+import { parseArguments, validateCommandArguments } from "./arguments.mjs";
+
 const HIGH_RISK_METHODS = new Set([
   "auth.connectSaved",
   "positions.close",
@@ -89,6 +91,7 @@ export function parseCommand(argv, environment = process.env) {
     throw new Error(`Unknown command: ${positionals.join(" ")}`);
   }
 
+  validateCommandArguments(method, positionals, options);
   return {
     help: false,
     method,
@@ -136,7 +139,7 @@ function parseAuth(positionals, options, environment) {
         method: "auth.connect",
         input: {
           identifier: requiredValue(options.identifier ?? environment.CAPITALCOM_IDENTIFIER, "--identifier or CAPITALCOM_IDENTIFIER"),
-          password: requiredValue(options.password ?? environment.CAPITALCOM_PASSWORD, "--password or CAPITALCOM_PASSWORD"),
+          password: requiredValue(options.password ?? environment.CAPITALCOM_PASSWORD, "--password or CAPITALCOM_PASSWORD", false),
           apiKey: requiredValue(options["api-key"] ?? environment.CAPITALCOM_API_KEY, "--api-key or CAPITALCOM_API_KEY"),
           environment: selectedEnvironment,
         },
@@ -240,40 +243,6 @@ function parseSchedules(positionals, options) {
   throw new Error("Use: schedules list|cancel|pause|reactivate|update");
 }
 
-function parseArguments(argv) {
-  const positionals = [];
-  const options = {};
-  let parsingOptions = true;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === "--") {
-      parsingOptions = false;
-    } else if (parsingOptions && (argument === "-h" || argument === "--help")) {
-      options.help = true;
-    } else if (parsingOptions && (argument === "-y" || argument === "--yes")) {
-      options.yes = true;
-    } else if (parsingOptions && argument === "--compact") {
-      options.compact = true;
-    } else if (parsingOptions && argument.startsWith("--")) {
-      const equalsIndex = argument.indexOf("=");
-      const name = argument.slice(2, equalsIndex === -1 ? undefined : equalsIndex);
-      if (!name) throw new Error("Invalid empty option.");
-      if (equalsIndex !== -1) {
-        options[name] = argument.slice(equalsIndex + 1);
-      } else {
-        const value = argv[index + 1];
-        if (value === undefined || value.startsWith("--")) throw new Error(`Option --${name} requires a value.`);
-        options[name] = value;
-        index += 1;
-      }
-    } else {
-      positionals.push(argument);
-    }
-  }
-  return { positionals, options };
-}
-
 function requiredPositional(positionals, index, message) {
   return requiredValue(positionals[index], message);
 }
@@ -282,9 +251,9 @@ function requiredOption(options, name) {
   return requiredValue(options[name], `Provide --${name}.`);
 }
 
-function requiredValue(value, description) {
+function requiredValue(value, description, trim = true) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`Missing ${description}`);
-  return value.trim();
+  return trim ? value.trim() : value;
 }
 
 function parseDirection(value) {

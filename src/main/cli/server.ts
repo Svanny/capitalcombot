@@ -55,7 +55,11 @@ export async function executeCliRequest(
   } finally {
     // A failed command can still have changed state before the failure.
     if (CLI_METHODS.includes(request.method as CliMethod) && !readOnlyMethods.includes(request.method)) {
-      onStateChanged?.();
+      try {
+        onStateChanged?.();
+      } catch {
+        // A closed renderer must not turn an already completed trade into a failure.
+      }
     }
   }
 }
@@ -117,6 +121,7 @@ async function dispatchCliRequest(
     case "schedules.reactivate":
       return handlers.reactivateSchedule(request.input);
     case "schedules.update":
+      requireCliConfirmation(request.confirmed);
       return handlers.updateSchedule(request.input);
     case "targetPosition.update": {
       requireCliConfirmation(request.confirmed);
@@ -198,7 +203,12 @@ export async function startCliServer(
 ): Promise<CliServer> {
   const token = randomBytes(32).toString("hex");
   const runtimeFilePath = options.runtimeFilePath ?? getCliRuntimeFilePath();
-  const server = createServer((socket) => handleConnection(socket, token, dependencies, options.onStateChanged));
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+    handleConnection(socket, token, dependencies, options.onStateChanged);
+  });
 
   await listen(server);
   const address = server.address();
@@ -224,6 +234,7 @@ export async function startCliServer(
       await chmod(runtimeFilePath, 0o600);
     }
   } catch (error) {
+    for (const socket of sockets) socket.destroy();
     await closeServer(server);
     throw error;
   }
@@ -236,6 +247,7 @@ export async function startCliServer(
       if (closed) return;
       closed = true;
       removeOwnedRuntimeFile(runtimeFilePath, token);
+      for (const socket of sockets) socket.destroy();
       await closeServer(server);
     },
   };
@@ -263,7 +275,9 @@ function handleConnection(socket: Socket, token: string, dependencies: IpcDepend
     handled = true;
     const line = payload.slice(0, newline);
     payload = "";
-    void processLine(line, token, dependencies, onStateChanged).then((response) => sendResponse(socket, response));
+    void processLine(line, token, dependencies, onStateChanged)
+      .then((response) => sendResponse(socket, response))
+      .catch(() => socket.destroy());
   });
 }
 
@@ -280,9 +294,17 @@ async function processLine(
     return failure("unknown", "INVALID_CLI_REQUEST", "CLI request must be valid JSON.");
   }
 
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return failure("unknown", "INVALID_CLI_REQUEST", "CLI request must be an object.");
+  }
   const id = typeof request.id === "string" ? request.id : "unknown";
   if (!secureTokenEqual(request.token, token)) {
     return failure(id, "CLI_UNAUTHORIZED", "CLI authentication failed.");
+  }
+  if (typeof request.id !== "string" || !request.id.trim() ||
+      typeof request.method !== "string" ||
+      (request.confirmed !== undefined && typeof request.confirmed !== "boolean")) {
+    return failure(id, "INVALID_CLI_REQUEST", "CLI request fields are invalid.");
   }
 
   try {
@@ -299,7 +321,9 @@ async function processLine(
 
 function secureTokenEqual(candidate: unknown, expected: string): boolean {
   if (typeof candidate !== "string" || candidate.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(candidate), Buffer.from(expected));
+  const candidateBytes = Buffer.from(candidate);
+  const expectedBytes = Buffer.from(expected);
+  return candidateBytes.length === expectedBytes.length && timingSafeEqual(candidateBytes, expectedBytes);
 }
 
 function parseHandlerError(error: unknown): AppError {

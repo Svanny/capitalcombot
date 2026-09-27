@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,14 +6,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryCredentialStore } from "../security/credential-store";
 import { MemoryAppStateStore } from "../state/app-store";
 import type { IpcDependencies, SchedulerLike, TradingClientLike } from "../ipc";
-import type { CliRequest, CliResponse } from "../../shared/cli";
+import type { CliResponse } from "../../shared/cli";
 import type { ScheduledOrderJob } from "../../shared/types";
 import { executeCliRequest, startCliServer, type CliServer } from "./server";
 
 const activeServers: CliServer[] = [];
+const directories: string[] = [];
+
+async function testDirectory(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "capitalcombot-cli-test-"));
+  directories.push(directory);
+  return directory;
+}
 
 afterEach(async () => {
   await Promise.all(activeServers.splice(0).map((server) => server.close()));
+  await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
 function createDependencies(): IpcDependencies {
@@ -59,9 +67,70 @@ function createDependencies(): IpcDependencies {
 }
 
 describe("CLI server", () => {
+  it.each([
+    ["{", "INVALID_CLI_REQUEST"],
+    ["x".repeat(1024 * 1024 + 1), "CLI_REQUEST_TOO_LARGE"],
+  ])("contains malformed and oversized wire requests %#", async (line, code) => {
+    const directory = await testDirectory();
+    const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    expect(await sendLine(server, line)).toMatchObject({ ok: false, error: { code } });
+    expect(await send(server, { id: "healthy", token: server.connection.token, method: "app.bootstrap" })).toMatchObject({ ok: true });
+  });
+  it("does not report a completed trade as failed if GUI notification throws", async () => {
+    const dependencies = createDependencies();
+    await expect(executeCliRequest(dependencies, { method: "positions.close", input: { dealId: "deal-1" }, confirmed: true },
+      () => { throw new Error("Window closed"); })).resolves.toMatchObject({ result: { status: "success" } });
+    expect(dependencies.client.closePosition).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes idle client sockets when shutting down", async () => {
+    const directory = await testDirectory();
+    const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    const socket = createConnection({ host: server.connection.host, port: server.connection.port });
+    await new Promise<void>((resolve) => socket.once("connect", resolve));
+    const closed = new Promise<void>((resolve) => socket.once("close", resolve));
+    await server.close();
+    await closed;
+    await expect(readFile(server.runtimeFilePath)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 1000);
+
+  it.each([{ confirmed: "true" }, { id: "" }, { method: {} }])("rejects invalid authenticated fields %j", async (fields) => {
+    const directory = await testDirectory();
+    const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    expect(await send(server, { id: "shape", token: server.connection.token, method: "app.bootstrap", ...fields }))
+      .toMatchObject({ ok: false, error: { code: "INVALID_CLI_REQUEST" } });
+  });
+  it("requires confirmation for raw schedule updates containing target settings", async () => {
+    const dependencies = createDependencies();
+    await expect(executeCliRequest(dependencies, {
+      method: "schedules.update", confirmed: false,
+      input: { jobId: "job", direction: "BUY", size: 1,
+        schedule: { type: "repeating", runTime: "09:30" }, targetPosition: { enabled: false } },
+    })).rejects.toThrow("USER_PRESENCE_REQUIRED");
+    expect(dependencies.scheduler.update).not.toHaveBeenCalled();
+  });
+
+  it.each([null, [], true, 1, "request"].map((request) => ({ request })))("rejects non-object request $request without killing the server", async ({ request }) => {
+    const directory = await testDirectory();
+    const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    expect(await send(server, request)).toMatchObject({ ok: false, error: { code: "INVALID_CLI_REQUEST" } });
+    expect(await send(server, { id: "next", token: server.connection.token, method: "app.bootstrap" })).toMatchObject({ ok: true });
+  });
+
+  it("rejects a Unicode token with the same character count", async () => {
+    const directory = await testDirectory();
+    const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    expect(await send(server, { id: "unicode", token: "é".repeat(64), method: "app.bootstrap" }))
+      .toMatchObject({ ok: false, error: { code: "CLI_UNAUTHORIZED" } });
+  });
   it("notifies the GUI after mutations, including commands that fail after changing state", async () => {
     const dependencies = createDependencies();
-    const directory = await mkdtemp(join(tmpdir(), "capitalcombot-cli-test-"));
+    const directory = await testDirectory();
     const onStateChanged = vi.fn();
     const server = await startCliServer(dependencies, {
       runtimeFilePath: join(directory, "connection.json"), onStateChanged,
@@ -170,7 +239,7 @@ describe("CLI server", () => {
   });
 
   it("accepts authenticated loopback requests and rejects a bad token", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "capitalcombot-cli-test-"));
+    const directory = await testDirectory();
     const runtimeFilePath = join(directory, "connection.json");
     const server = await startCliServer(createDependencies(), { runtimeFilePath });
     activeServers.push(server);
@@ -197,15 +266,20 @@ describe("CLI server", () => {
   });
 });
 
-function send(server: CliServer, request: CliRequest): Promise<CliResponse> {
+function send(server: CliServer, request: unknown): Promise<CliResponse> {
+  return sendLine(server, JSON.stringify(request));
+}
+
+function sendLine(server: CliServer, line: string): Promise<CliResponse> {
   return new Promise((resolvePromise, reject) => {
     const socket = createConnection({
       host: server.connection.host,
       port: server.connection.port,
     });
     let payload = "";
+    socket.setTimeout(500, () => { socket.destroy(); reject(new Error("No CLI response")); });
     socket.setEncoding("utf8");
-    socket.once("connect", () => socket.write(`${JSON.stringify(request)}\n`));
+    socket.once("connect", () => socket.write(`${line}\n`));
     socket.on("data", (chunk) => {
       payload += chunk;
       const newline = payload.indexOf("\n");

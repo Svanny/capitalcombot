@@ -28,7 +28,8 @@ export async function callRunningApp({ method, input, confirmed }) {
     connection?.version !== 1 ||
     connection?.host !== "127.0.0.1" ||
     !Number.isInteger(connection?.port) ||
-    typeof connection?.token !== "string"
+    connection.port < 1 || connection.port > 65535 ||
+    typeof connection?.token !== "string" || !connection.token
   ) {
     throw new Error(`Invalid CLI connection file: ${runtimeFilePath}`);
   }
@@ -45,6 +46,11 @@ export async function callRunningApp({ method, input, confirmed }) {
 
 function sendRequest(connection, request) {
   return new Promise((resolvePromise, reject) => {
+    const encodedRequest = `${JSON.stringify(request)}\n`;
+    if (Buffer.byteLength(encodedRequest, "utf8") > 1024 * 1024) {
+      reject(new Error("CLI request is too large."));
+      return;
+    }
     const socket = createConnection({ host: connection.host, port: connection.port });
     let settled = false;
     let payload = "";
@@ -52,13 +58,14 @@ function sendRequest(connection, request) {
     const finish = (callback) => {
       if (settled) return;
       settled = true;
+      clearTimeout(deadline);
       socket.destroy();
       callback();
     };
 
     socket.setEncoding("utf8");
-    socket.setTimeout(30_000, () => finish(() => reject(new Error("The running app did not respond within 30 seconds."))));
-    socket.once("connect", () => socket.write(`${JSON.stringify(request)}\n`));
+    const deadline = setTimeout(() => finish(() => reject(new Error("The running app did not respond within 30 seconds. The command may still be running; check its outcome before retrying."))), 30_000);
+    socket.once("connect", () => socket.write(encodedRequest));
     socket.on("data", (chunk) => {
       payload += chunk;
       if (Buffer.byteLength(payload, "utf8") > MAX_RESPONSE_BYTES) {
@@ -71,6 +78,13 @@ function sendRequest(connection, request) {
       finish(() => {
         try {
           const response = JSON.parse(payload.slice(0, newline));
+          if (!response || typeof response !== "object" || Array.isArray(response) ||
+              typeof response.ok !== "boolean" ||
+              (!response.ok && (typeof response.error?.message !== "string" ||
+                typeof response.error?.code !== "string" ||
+                (response.error.detail !== undefined && typeof response.error.detail !== "string")))) {
+            throw new Error("The app returned an invalid response.");
+          }
           if (response.id !== request.id) throw new Error("The app returned a mismatched response.");
           if (!response.ok) {
             const error = new Error(response.error?.message ?? "The command failed.");
@@ -88,5 +102,8 @@ function sendRequest(connection, request) {
     socket.once("error", (error) =>
       finish(() => reject(new Error(`Could not reach the running app: ${error.message}`))),
     );
+    socket.once("close", () => finish(() => reject(new Error(
+      "The app closed the connection before returning a complete response. Check the command's outcome before retrying.",
+    ))));
   });
 }
