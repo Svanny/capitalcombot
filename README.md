@@ -102,6 +102,8 @@ pnpm install
 pnpm dev
 ```
 
+The development window opens in full screen. Use your operating system's full-screen shortcut to leave it.
+
 ### Command line
 
 Keep `pnpm dev` running in one terminal, then call the same validated operations used by the GUI
