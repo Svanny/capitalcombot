@@ -579,6 +579,10 @@ a {
   gap: 8px;
 }
 
+.schedule-error {
+  color: var(--warn);
+}
+
 .schedule-card-header {
   display: grid;
   gap: 2px;

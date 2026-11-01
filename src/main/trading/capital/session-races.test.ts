@@ -50,4 +50,27 @@ describe("session concurrency", () => {
     await expect(Promise.all(requests)).resolves.toEqual([[], [], []]);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(2);
   });
+
+  it("connects a saved account when scheduled work starts before the app session", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(session());
+    const client = new CapitalClient(fetchMock);
+
+    await client.ensureConnected(credentials);
+
+    expect(client.isConnected()).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not silently reconnect after an explicit disconnect", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValue(new Response("{}"))
+      .mockResolvedValueOnce(session());
+    const client = new CapitalClient(fetchMock);
+
+    await client.connect(credentials);
+    await client.disconnect();
+
+    await expect(client.ensureConnected(credentials)).rejects.toMatchObject({ code: "NOT_CONNECTED" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

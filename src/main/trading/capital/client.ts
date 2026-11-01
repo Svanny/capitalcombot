@@ -78,6 +78,7 @@ const BASE_URLS: Record<TradingEnvironment, string> = {
 export class CapitalClient {
   private session: SessionTokens | null = null;
   private credentials: CapitalCredentials | null = null;
+  private savedReconnectDisabled = false;
   private sessionVersion = 0;
   private pendingSession: Promise<void> | null = null;
 
@@ -87,7 +88,36 @@ export class CapitalClient {
     return Boolean(this.session && this.session.expiresAt > Date.now());
   }
 
+  /**
+   * Scheduled work can outlive the renderer session, including across an app
+   * restart. Reuse the active session when possible, renew it when credentials
+   * are already held, and fall back to the saved credentials supplied by the
+   * caller when the process has not connected yet.
+   */
+  async ensureConnected(savedCredentials?: CapitalCredentials | null): Promise<void> {
+    if (this.isConnected()) {
+      return;
+    }
+
+    if (this.savedReconnectDisabled) {
+      throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
+    }
+
+    if (this.credentials) {
+      await this.ensureSession();
+      return;
+    }
+
+    if (savedCredentials) {
+      await this.connect(savedCredentials);
+      return;
+    }
+
+    throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
+  }
+
   connect(credentials: CapitalCredentials): Promise<void> {
+    this.savedReconnectDisabled = false;
     const pending = this.startSession(credentials, ++this.sessionVersion);
     this.pendingSession = pending;
     const clearPending = () => {
@@ -140,6 +170,7 @@ export class CapitalClient {
   }
 
   async disconnect(): Promise<void> {
+    this.savedReconnectDisabled = true;
     const session = this.session;
     const credentials = this.credentials;
     this.sessionVersion += 1;

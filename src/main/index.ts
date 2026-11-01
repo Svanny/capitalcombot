@@ -11,6 +11,12 @@ import { executeTargetPositionJob } from "./trading/target-position-execution";
 import { startCliServer, type CliServer } from "./cli/server";
 import { IPC_CHANNELS } from "../shared/ipc";
 
+// Vite serves fresh assets locally; avoid reopening a stale or locked Chromium
+// HTTP disk cache across development restarts. Set this before app readiness.
+if (process.env.ELECTRON_RENDERER_URL) {
+  app.commandLine.appendSwitch("disable-http-cache");
+}
+
 const client = new CapitalClient();
 const currentDir = fileURLToPath(new URL(".", import.meta.url));
 const iconPath = join(currentDir, "../../gold_die_logo.png");
@@ -57,6 +63,13 @@ app.whenReady().then(async () => {
   const store = appStateBootstrap.store;
   const credentials = await createCredentialStore();
   const scheduler = new ScheduledOrderScheduler(store, async (job) => {
+    // A schedule may fire after startup, after the REST session's ten-minute
+    // idle window, or before the user has opened the saved-session prompt.
+    // Restore the saved account just in time for the broker request.
+    if (!client.isConnected()) {
+      await client.ensureConnected(await credentials.store.load());
+    }
+
     if (job.targetPosition) {
       return executeTargetPositionJob(client, job);
     }

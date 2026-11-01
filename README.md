@@ -102,7 +102,7 @@ pnpm install
 pnpm dev
 ```
 
-The development window opens maximized.
+The development window opens maximized. HTTP disk caching is disabled in development to avoid Chromium cache write errors across restarts; saved settings and trading state are still persisted.
 
 ### Command line
 

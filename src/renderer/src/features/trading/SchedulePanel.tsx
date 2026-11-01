@@ -265,6 +265,7 @@ export function SchedulePanel({
                           : "Waiting for schedule window.")}
                     </span>
                   </div>
+                  {job.lastError ? <small className="schedule-error">{job.lastError}</small> : null}
                   {isPending ? (
                     <div className="inline-actions">
                       <button
