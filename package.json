@@ -19,8 +19,8 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev --watch",
-    "dev:plain": "electron-vite dev",
+    "dev": "node scripts/run-electron-vite.mjs dev --watch",
+    "dev:plain": "node scripts/run-electron-vite.mjs dev",
     "cli": "node scripts/cli.mjs",
     "build": "tsc --noEmit && electron-vite build",
     "package:mac": "bash scripts/package-mac.sh",
@@ -28,7 +28,7 @@
     "package:win:native": "node scripts/package-win-native.mjs",
     "package:win": "bash scripts/package-win-docker.sh",
     "package:all": "pnpm package:mac && pnpm package:win",
-    "preview": "electron-vite preview",
+    "preview": "node scripts/run-electron-vite.mjs preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
