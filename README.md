@@ -98,6 +98,10 @@ pnpm install
 
 ### Run
 
+Both `capitalcombot` and `capitalcomgoldperformancetracker` normally run continuously
+using **`pnpm dev`**, including their Vite servers and Electron apps. A built app or
+`pnpm preview` is not the normal always-on runtime.
+
 ```bash
 pnpm dev
 ```
@@ -107,45 +111,58 @@ The development and preview launchers also clear `ELECTRON_RUN_AS_NODE`, so a No
 
 ### Command line
 
-For unattended schedules on Windows, use a built app supervised independently of the
-development terminal:
+For always-on development on Windows, install the shared watcher from this checkout:
 
 ```powershell
-pnpm build
-powershell -NoProfile -File scripts/install-scheduled-runtime.ps1
-powershell -NoProfile -File scripts/run-scheduled-app.ps1
+powershell -NoProfile -File scripts/install-dev-runtimes.ps1 `
+  -TrackerWorkspace "C:\path\to\capitalcomgoldperformancetracker" `
+  -NodeExecutable "C:\path\to\supported\node.exe"
+Start-ScheduledTask -TaskName 'Capitalcombot Dev Always On'
+Start-ScheduledTask -TaskName 'Capitalcomgoldperformancetracker Dev Always On'
 ```
 
-The installer adds a hidden sign-in launcher and the **Capitalcombot Always On** Windows
-task. The task checks every minute and starts a missing supervisor. The supervisor
-restarts all app exits and restarts a hung app after 90 seconds without a main-process
-heartbeat. Replacement supervisors adopt the existing app to avoid duplicate instances.
-The heartbeat also verifies that the command listener is still open.
+The installer creates independent Windows recovery tasks and a hidden sign-in launcher
+for both projects. Disable and stop the legacy **Capitalcombot Always On** task before
+switching: that older task supervises a built app and does not maintain Vite. The new
+tasks launch each project's actual `pnpm dev` command with a persistent Node runtime
+outside the temporary folder. They recover a stopped watcher at the next minute check.
+
+The bot uses `http://127.0.0.1:5173`; the tracker uses `http://127.0.0.1:5174`.
+Both ports are strict, so neither app silently changes origin. The watcher checks the
+expected HTML title, Vite's client, and a lightweight authenticated health request to
+the Electron command listener, without loading credentials or reports. Three consecutive
+failures trigger restart of that project's owned process tree. Initial startup allows five minutes for the
+tracker's native build. Closing Electron, stopping the dev command, or losing Vite
+therefore recovers without keeping a terminal open. A replacement watcher adopts a
+healthy existing dev instance instead of creating a duplicate.
 
 In supervised mode, closing the window keeps the app running in the system tray,
 even with no scheduled orders. Use **Open Trading Assistant** to reopen it. The app
 prevents automatic sleep, checks the broker connection every minute, and retries after
 outages. Explicit account disconnects remain respected. To stop always-on operation for
-maintenance, disable and stop **Capitalcombot Always On** in Task Scheduler, stop its
-PowerShell supervisor, then stop the app. The tray offers no Quit in always-on mode.
+maintenance, disable and stop that project's **Dev Always On** task in Task Scheduler,
+then stop its dev processes. The bot tray offers no Quit in always-on mode.
 
 The display can turn off and the Windows session can be locked. This desktop runtime
 requires the Windows user to be signed in; it is not a service that runs before login.
 Manual sleep, shutdown, power loss, and network outages can still interrupt trading.
 Missed or interrupted orders are recorded rather than replayed.
 
-Lifecycle events are recorded in `%APPDATA%/capitalcombot/lifecycle.jsonl`; supervisor
-launches and exit codes are in `%LOCALAPPDATA%/capitalcombot/runtime/supervisor.jsonl`.
-To remove automatic startup, disable the Windows task and delete `Capitalcombot Scheduler.vbs`
+Lifecycle events are recorded in `%APPDATA%/capitalcombot/lifecycle.jsonl`. Per-project
+watcher events, dev output, and state are under `%LOCALAPPDATA%/capitalcom-dev-runtime/`.
+Token-free watcher health is available at `http://127.0.0.1:18731` for the bot and
+`http://127.0.0.1:18732` for the tracker. To remove automatic startup, disable both dev
+tasks and delete `Capitalcombot Scheduler.vbs`
 from the Windows Startup folder (`shell:startup`). Stop the development app before starting the supervisor;
 only one app instance can run at a time.
 
-`powershell -NoProfile -File scripts/test-scheduled-runtime.ps1` checks clean-exit recovery,
-hung-process recovery, singleton supervision, and adoption with a local Node fixture.
-It does not connect to the broker or modify trading state.
+The development-watchdog tests cover renderer identity, Vite and main-process health,
+timeout recovery policy, and process ownership including PID reuse. Health checks do
+not place trades or refresh performance data. The legacy built-app supervisor remains
+available for explicit production use, but should not run alongside these dev tasks.
 
-Keep `pnpm dev` running in one terminal, then call the same validated operations used by the GUI
-from another terminal:
+With the app running under the watcher or a manual `pnpm dev`, call the same validated
+operations used by the GUI from a terminal:
 
 ```bash
 pnpm cli -- status

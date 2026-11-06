@@ -67,6 +67,18 @@ function createDependencies(): IpcDependencies {
 }
 
 describe("CLI server", () => {
+  it("reports authenticated health without loading account credentials", async () => {
+    const directory = await testDirectory();
+    const dependencies = createDependencies();
+    const loadProfile = vi.spyOn(dependencies.credentials, "getSavedProfile");
+    const server = await startCliServer(dependencies, { runtimeFilePath: join(directory, "connection.json") });
+    activeServers.push(server);
+    expect(await send(server, { id: "probe", token: server.connection.token, method: "runtime.health" }))
+      .toMatchObject({ ok: true, result: { pid: process.pid, ready: true } });
+    expect(loadProfile).not.toHaveBeenCalled();
+    expect(await send(server, { id: "probe", token: "bad", method: "runtime.health" }))
+      .toMatchObject({ ok: false, error: { code: "CLI_UNAUTHORIZED" } });
+  });
   it.each([
     ["{", "INVALID_CLI_REQUEST"],
     ["x".repeat(1024 * 1024 + 1), "CLI_REQUEST_TOO_LARGE"],

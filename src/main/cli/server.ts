@@ -310,6 +310,9 @@ async function processLine(
   }
 
   try {
+    if (request.method === "runtime.health") {
+      return { id, ok: true, result: { pid: process.pid, ready: true } };
+    }
     return {
       id,
       ok: true,
