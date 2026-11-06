@@ -1,4 +1,4 @@
-import { BrowserWindow, app, nativeImage } from "electron";
+import { BrowserWindow, app, nativeImage, powerMonitor } from "electron";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CapitalClient } from "./trading/capital/client";
@@ -10,6 +10,9 @@ import { ScheduledOrderScheduler } from "./trading/scheduler";
 import { executeTargetPositionJob } from "./trading/target-position-execution";
 import { startCliServer, type CliServer } from "./cli/server";
 import { IPC_CHANNELS } from "../shared/ipc";
+import { createLifecycleLog } from "./runtime/lifecycle-log";
+import { protectScheduleRuntime } from "./runtime/schedule-runtime";
+import { startConnectionMaintenance, startRuntimeHeartbeat } from "./runtime/health";
 
 // Vite serves fresh assets locally; avoid reopening a stale or locked Chromium
 // HTTP disk cache across development restarts. Set this before app readiness.
@@ -22,6 +25,18 @@ const currentDir = fileURLToPath(new URL(".", import.meta.url));
 const iconPath = join(currentDir, "../../gold_die_logo.png");
 const appIcon = nativeImage.createFromPath(iconPath);
 let cliServer: CliServer | null = null;
+let runtime: ReturnType<typeof protectScheduleRuntime> | undefined;
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
+
+function showMainWindow(): void {
+  const window = BrowserWindow.getAllWindows()[0];
+  if (!window) { createMainWindow(); return; }
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+app.on("second-instance", showMainWindow);
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -39,6 +54,7 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+  runtime?.attachWindow(window);
 
   if (process.platform !== "darwin") {
     window.setMenuBarVisibility(false);
@@ -54,13 +70,31 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(async () => {
+if (ownsInstance) app.whenReady().then(async () => {
+  const log = createLifecycleLog(app.getPath("userData"));
+  log("started", `version=${app.getVersion()}; supervised=${process.env.CAPITALCOMBOT_SUPERVISED === "1"}`);
+  app.on("before-quit", () => log("before-quit"));
+  app.on("will-quit", () => log("will-quit"));
+  app.on("render-process-gone", (_event, _contents, detail) => log("renderer-gone", JSON.stringify(detail)));
+  app.on("child-process-gone", (_event, detail) => log("child-process-gone", JSON.stringify(detail)));
+  process.on("uncaughtException", (error) => {
+    log("uncaught-exception", error.stack);
+    app.exit(1);
+  });
+  process.on("unhandledRejection", (error) => {
+    log("unhandled-rejection", error instanceof Error ? error.stack : String(error));
+    app.exit(1);
+  });
+  powerMonitor.on("suspend", () => log("suspend"));
+  powerMonitor.on("resume", () => log("resume"));
+  powerMonitor.on("shutdown", () => log("shutdown"));
   if (process.platform === "darwin" && app.dock && !appIcon.isEmpty()) {
     app.dock.setIcon(appIcon);
   }
 
   const appStateBootstrap = await createAppStateStore();
-  const store = appStateBootstrap.store;
+  runtime = protectScheduleRuntime(appStateBootstrap.store, appIcon, showMainWindow, log);
+  const store = runtime.store;
   const credentials = await createCredentialStore();
   const scheduler = new ScheduledOrderScheduler(store, async (job) => {
     // A schedule may fire after startup, after the REST session's ten-minute
@@ -124,7 +158,18 @@ app.whenReady().then(async () => {
   });
   createMainWindow();
   const restoredSchedules = scheduler.restore();
-  const restoredPendingSchedules = restoredSchedules.filter((job) => job.status === "scheduled");
+  const restoredPendingSchedules = restoredSchedules.filter((job) => job.status === "scheduled" || job.targetAutoPaused);
+  log("schedules-restored", `count=${restoredPendingSchedules.length}`);
+  const stopHeartbeat = startRuntimeHeartbeat(process.env.CAPITALCOMBOT_HEARTBEAT_FILE,
+    () => client.isConnected(), () => cliServer?.isListening() === true);
+  const stopConnection = process.env.CAPITALCOMBOT_SUPERVISED === "1"
+    ? startConnectionMaintenance(async () => {
+        await client.ensureConnected(await credentials.store.load());
+        // A read-only request verifies the broker session and network, rather
+        // than just trusting the local token expiry.
+        await client.getAccountPreferences();
+      }, log) : () => {};
+  app.once("will-quit", () => { stopHeartbeat(); stopConnection(); });
 
   if (restoredPendingSchedules.length > 0) {
     store.appendExecution(
@@ -137,10 +182,11 @@ app.whenReady().then(async () => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+    showMainWindow();
   });
+}).catch((error) => {
+  createLifecycleLog(app.getPath("userData"))("startup-failed", error instanceof Error ? error.stack : String(error));
+  app.exit(1);
 });
 
 app.once("before-quit", () => {

@@ -89,9 +89,11 @@ describe("CLI server", () => {
     const server = await startCliServer(createDependencies(), { runtimeFilePath: join(directory, "connection.json") });
     activeServers.push(server);
     const socket = createConnection({ host: server.connection.host, port: server.connection.port });
+    expect(server.isListening()).toBe(true);
     await new Promise<void>((resolve) => socket.once("connect", resolve));
     const closed = new Promise<void>((resolve) => socket.once("close", resolve));
     await server.close();
+    expect(server.isListening()).toBe(false);
     await closed;
     await expect(readFile(server.runtimeFilePath)).rejects.toMatchObject({ code: "ENOENT" });
   }, 1000);

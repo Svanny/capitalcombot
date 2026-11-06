@@ -11,6 +11,27 @@ const deferred = <T>() => {
 afterEach(() => vi.useRealTimers());
 
 describe("session concurrency", () => {
+  it("shares a saved-account login between maintenance and scheduled work", async () => {
+    const pending = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>(() => pending.promise);
+    const client = new CapitalClient(fetchMock);
+    const checks = [client.ensureConnected(credentials), client.ensureConnected(credentials)];
+    pending.resolve(session());
+    await expect(Promise.all(checks)).resolves.toEqual([undefined, undefined]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+  it("renews a rejected token on the next check without replaying the rejected request", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(session())
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+      .mockResolvedValueOnce(session()).mockResolvedValueOnce(new Response('{"positions":[]}'));
+    const client = new CapitalClient(fetchMock);
+    await client.connect(credentials);
+    await expect(client.listPositions()).rejects.toMatchObject({ code: "CAPITAL_401" });
+    expect(client.isConnected()).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(client.listPositions()).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
   it("does not reconnect when a login completes after disconnect", async () => {
     const pending = deferred<Response>();
     const client = new CapitalClient(vi.fn(() => pending.promise));

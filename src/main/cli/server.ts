@@ -21,6 +21,7 @@ const LOOPBACK_HOST = "127.0.0.1" as const;
 export interface CliServer {
   connection: CliConnectionInfo;
   runtimeFilePath: string;
+  isListening(): boolean;
   close(): Promise<void>;
 }
 
@@ -243,6 +244,7 @@ export async function startCliServer(
   return {
     connection,
     runtimeFilePath,
+    isListening: () => server.listening,
     close: async () => {
       if (closed) return;
       closed = true;

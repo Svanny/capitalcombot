@@ -107,6 +107,43 @@ The development and preview launchers also clear `ELECTRON_RUN_AS_NODE`, so a No
 
 ### Command line
 
+For unattended schedules on Windows, use a built app supervised independently of the
+development terminal:
+
+```powershell
+pnpm build
+powershell -NoProfile -File scripts/install-scheduled-runtime.ps1
+powershell -NoProfile -File scripts/run-scheduled-app.ps1
+```
+
+The installer adds a hidden sign-in launcher and the **Capitalcombot Always On** Windows
+task. The task checks every minute and starts a missing supervisor. The supervisor
+restarts all app exits and restarts a hung app after 90 seconds without a main-process
+heartbeat. Replacement supervisors adopt the existing app to avoid duplicate instances.
+The heartbeat also verifies that the command listener is still open.
+
+In supervised mode, closing the window keeps the app running in the system tray,
+even with no scheduled orders. Use **Open Trading Assistant** to reopen it. The app
+prevents automatic sleep, checks the broker connection every minute, and retries after
+outages. Explicit account disconnects remain respected. To stop always-on operation for
+maintenance, disable and stop **Capitalcombot Always On** in Task Scheduler, stop its
+PowerShell supervisor, then stop the app. The tray offers no Quit in always-on mode.
+
+The display can turn off and the Windows session can be locked. This desktop runtime
+requires the Windows user to be signed in; it is not a service that runs before login.
+Manual sleep, shutdown, power loss, and network outages can still interrupt trading.
+Missed or interrupted orders are recorded rather than replayed.
+
+Lifecycle events are recorded in `%APPDATA%/capitalcombot/lifecycle.jsonl`; supervisor
+launches and exit codes are in `%LOCALAPPDATA%/capitalcombot/runtime/supervisor.jsonl`.
+To remove automatic startup, disable the Windows task and delete `Capitalcombot Scheduler.vbs`
+from the Windows Startup folder (`shell:startup`). Stop the development app before starting the supervisor;
+only one app instance can run at a time.
+
+`powershell -NoProfile -File scripts/test-scheduled-runtime.ps1` checks clean-exit recovery,
+hung-process recovery, singleton supervision, and adoption with a local Node fixture.
+It does not connect to the broker or modify trading state.
+
 Keep `pnpm dev` running in one terminal, then call the same validated operations used by the GUI
 from another terminal:
 

@@ -50,6 +50,14 @@ marked failed and require checking the broker account before scheduling another 
 Malformed broker position snapshots are rejected; only an explicit empty positions
 array is treated as a flat portfolio.
 The app must be running and connected to execute schedules.
+Closing its window with pending schedules keeps it running in the tray, and armed
+schedules prevent automatic sleep. The Windows supervised launcher can start at
+sign-in and restart exits or hung main processes. A Windows recovery task restarts a
+missing supervisor. Always-on mode stays awake and listening even with no pending
+schedules; its tray has no Quit action. It verifies broker connectivity every minute
+and respects explicit account disconnects. The user must remain signed in (locking is
+fine). Lifecycle and supervisor logs record shutdown and crash evidence. Missed orders
+are not replayed automatically after recovery.
 
 ## Verification
 

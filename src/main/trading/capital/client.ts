@@ -103,6 +103,11 @@ export class CapitalClient {
       throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
     }
 
+    if (this.pendingSession) {
+      await this.pendingSession;
+      return;
+    }
+
     if (this.credentials) {
       await this.ensureSession();
       return;
@@ -464,6 +469,7 @@ export class CapitalClient {
       throw createAppError("NOT_CONNECTED", "Connect to Capital.com before trading.", true);
     }
 
+    const requestSession = this.session;
     const response = await this.fetchImpl(this.buildUrl(this.credentials.environment, path, params), {
       ...init,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -475,6 +481,9 @@ export class CapitalClient {
     });
 
     if (!response.ok) {
+      // A revoked token must be renewed on the next check. Do not retry a
+      // trading request here: its broker outcome may be ambiguous.
+      if (response.status === 401 && this.session === requestSession) this.session = null;
       throw await this.toAppError(response, "Capital.com request failed.");
     }
 
