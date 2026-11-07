@@ -78,7 +78,7 @@ The portfolio tab is the follow-through screen. It shows open positions, schedul
 ### Requirements
 
 - macOS for local development and DMG packaging
-- Node.js 25+
+- Node.js 24.22.1+ (24.x recommended; supported alternatives: 22.23.4+ on 22.x or 26.12.1+ on 26.x)
 - `pnpm`
 - A Capital.com account with API access enabled
 - Capital.com account identifier, API password, and API key
