@@ -16,6 +16,7 @@ import {
 import { createAppError, normalizeError } from "./capital/client";
 import { buildExecutionResult, type AppStateStore } from "../state/app-store";
 import { automaticTargetPause, canCheckSchedule, isAutomaticTargetPause, restoreTargetPause } from "../../shared/target-pause";
+import { marketReopeningBefore } from "./market-reopening";
 
 export type ScheduledOrderInput = ScheduledOrderRequest & {
   epic: string;
@@ -524,12 +525,15 @@ export class ScheduledOrderScheduler {
 
       if (executing.scheduleType === "repeating" && executing.runTime) {
         const nextRunAt = getNextOccurrenceFromTime(executing.runTime, this.clock.now());
+        const reopening = marketReopeningBefore(failure, executing.epic, this.clock.now(), nextRunAt.getTime());
         const retriedJob: ScheduledOrderJob = {
           ...executing,
           status: "scheduled",
-          runAt: nextRunAt.toISOString(),
+          runAt: (reopening ?? nextRunAt).toISOString(),
           lastError: detail,
-          reason: "Automatic order failed. Next repeating run scheduled.",
+          reason: reopening
+            ? "Market closed. Retrying at the broker's next opening before the next daily run."
+            : "Automatic order failed. Next repeating run scheduled.",
         };
         this.replaceJob(retriedJob);
         this.arm(retriedJob);
@@ -538,7 +542,9 @@ export class ScheduledOrderScheduler {
             "schedule",
             "error",
             `Scheduled ${executing.direction} order failed for ${executing.instrumentName}.`,
-            `${detail} Retrying at the next repeating schedule.`,
+            reopening
+              ? `${detail} Retrying at ${reopening.toISOString()}.`
+              : `${detail} Retrying at the next repeating schedule.`,
           ),
         );
         return;

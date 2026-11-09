@@ -18,8 +18,14 @@ instead of projecting a fill during the closed 03:30 occurrence. This uses the
 existing automatic-pause behavior; configured leg times remain unchanged.
 
 The late short check recovers an earlier failure or intervening position change.
-If the market is closed, the broker rejection is recorded and a repeating job
-tries at its next daily occurrence. Zero differences never submit an order.
+If the broker explicitly rejects an order as closed and supplies a supported UTC
+timetable, a repeating job retries five seconds after the next opening, provided
+that opening is before its next daily occurrence. This handles seasonal changes
+to Gold's overnight break without changing configured local times. The deferred
+run remains visible, can be paused or cancelled, and survives restart. Otherwise
+the job waits for its next daily occurrence. One-off failures and uncertain broker
+outcomes are never retried this way. Target exposure is fetched again on retry.
+Zero differences never submit an order.
 
 ## Pause behavior
 
